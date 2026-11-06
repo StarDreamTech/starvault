@@ -1,5 +1,7 @@
 name: Checks
 on: [push, pull_request]
+env:
+  PYTHONUTF8: "1"
 permissions:
   contents: read
 jobs:
@@ -14,6 +16,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
+      - name: Windows file-state diagnostics
+        if: runner.os == 'Windows'
+        run: python -c "import os,tempfile,pathlib; p=pathlib.Path(tempfile.mktemp(suffix='.sh')); p.write_text('test'); f=p.open('rb'); fields=['st_dev','st_ino','st_size','st_mtime_ns','st_ctime_ns','st_mode']; print('PATH',[(k,getattr(p.stat(),k)) for k in fields]); print('FD',[(k,getattr(os.fstat(f.fileno()),k)) for k in fields]); f.close(); p.unlink()"
       - run: python -m unittest -q
   desktop:
     runs-on: macos-latest

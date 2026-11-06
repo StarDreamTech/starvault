@@ -185,7 +185,8 @@ class SkillBackupTest(unittest.TestCase):
         with zipfile.ZipFile(path, 'w') as package:
             package.writestr('SKILL.md', 'example')
             for name, mode in entries:
-                info = zipfile.ZipInfo(name)
+                info = zipfile.ZipInfo()
+                info.filename = name  # Preserve malicious backslashes on Windows too.
                 info.create_system = 3
                 info.external_attr = mode << 16
                 package.writestr(info, b'payload')

@@ -56,7 +56,7 @@ class CliTest(unittest.TestCase):
     def put(self, relative, value):
         path = self.archive / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(value if isinstance(value, str) else json.dumps(value, ensure_ascii=False), encoding='utf-8')
+        path.write_bytes((value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)).encode('utf-8'))
         return path
 
     def command(self, *args, payload=None, success=True):

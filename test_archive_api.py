@@ -18,7 +18,7 @@ class ArchiveApiTest(unittest.TestCase):
     def put(self, relative, value):
         path = self.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(value if isinstance(value, str) else json.dumps(value, ensure_ascii=False), encoding='utf-8')
+        path.write_bytes((value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)).encode('utf-8'))
         return path
 
     def session(self, branch='my-laptop-codex', sid='shared-id', body='第一段\r\n第二段🙂', **metadata):

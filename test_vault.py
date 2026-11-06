@@ -7,6 +7,7 @@ import json
 import os
 import sqlite3
 from pathlib import Path
+from contextlib import closing
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -151,9 +152,10 @@ class ArchiveTest(unittest.TestCase):
                      'thread-project-assignments': {SID: {'projectId': 'project-1'}},
                      'pinned-project-ids': ['project-1'], 'project-order': ['project-1']}
             (home / '.codex-global-state.json').write_text(json.dumps(state))
-            with sqlite3.connect(home / 'state_1.sqlite') as db:
+            with closing(sqlite3.connect(home / 'state_1.sqlite')) as db:
                 db.execute('CREATE TABLE threads (id TEXT, title TEXT, cwd TEXT, archived INTEGER)')
                 db.execute('INSERT INTO threads VALUES (?, ?, ?, ?)', (SID, '会话', '/code/game/worktree', 1))
+                db.commit()
             dest = root / 'backup/mac-codex'
             vault.export('codex', home, dest)
             row = json.loads((dest / 'index.json').read_text())['sessions'][SID]

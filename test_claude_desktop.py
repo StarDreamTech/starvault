@@ -123,7 +123,7 @@ class ClaudeDesktopTest(unittest.TestCase):
                                        ('win32', '/user/AppData/Roaming/Claude'),
                                        ('linux', '/user/.config/Claude')]:
                 with patch.object(claude_desktop.sys, 'platform', platform):
-                    self.assertEqual(str(claude_desktop.default_home()), expected)
+                    self.assertEqual(claude_desktop.default_home(), Path(expected))
             with patch.object(claude_desktop.sys, 'platform', 'win32'), patch.dict(os.environ, {'APPDATA': '/roaming'}):
                 self.assertEqual(claude_desktop.default_home(), Path('/roaming/Claude'))
             with patch.object(claude_desktop.sys, 'platform', 'linux'), patch.dict(os.environ, {'XDG_CONFIG_HOME': '/xdg'}):
