@@ -105,3 +105,5 @@ macOS 默认工具和备份位于 `~/Library/Application Support/ChatHistoryVaul
 软件代码发布在 `cpython666/starvault`；原 `cpython666/chat-history-vault` 继续作为私有聊天备份库。发布使用全新的代码快照，显式排除 `.local`、聊天数据分支、records、配置和构建缓存，不把备份仓库改为公开。Homebrew 使用 `cpython666/homebrew-tap`，Formula 提供 `starvault` / 兼容命令、MCP 和 Skill，Cask 提供 Apple Silicon macOS 应用。发布前检查源包、桌面包和实际安装后的命令。
 
 附件偏好通过 `resources.save_policy` 保存，CLI 为 `attachment-policy`，MCP 为 `get_backup_preferences` / `set_backup_preferences`。空 kinds 表示停止额外复制附件，已有副本继续保留；保存偏好不能顺带开始迁移。桌面“补齐已有会话的附件”仍先估算空间再复制。原始会话快照可能自带内嵌资源，不把仅会话模式描述为删除原文内的图片。
+
+附件面板优先显示当前会话文件：名称/路径、类型、状态、大小筛选，单项与汇总大小、可调缩略图。原文清单中的 assets 也应列入并按副本路径去重；只在校验过的归档对象或显式图片目录中预览。不要把未知大小当零字节，不把列表筛选误称为复制范围，精确新增空间沿用已有估算。缩略图加载器在应用初始化时注册，不能依赖正文 Markdown 是否已渲染。

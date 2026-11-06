@@ -15,6 +15,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod attachments_view;
 mod brand;
 #[cfg(test)]
 mod replies_view_tests;
@@ -109,6 +110,12 @@ struct Preferences {
     timeline_view: bool,
     #[serde(default = "default_thumbnail_width")]
     thumbnail_width: u32,
+    #[serde(default = "default_attachment_preview_width")]
+    attachment_preview_width: u32,
+}
+
+fn default_attachment_preview_width() -> u32 {
+    128
 }
 
 fn default_thumbnail_width() -> u32 {
@@ -1163,6 +1170,7 @@ enum SkillJob {
 
 fn setup(ctx: &egui::Context, font_size: f32) {
     ctx.set_theme(egui::Theme::Light);
+    egui_extras::install_image_loaders(ctx);
     ctx.add_bytes_loader(Arc::new(LocalImageUrls::default()));
     let mut fonts = egui::FontDefinitions::default();
     let candidates = [
@@ -1257,7 +1265,8 @@ struct VaultApp {
     capture_after: Option<Instant>,
     capture_requested: bool,
     show_resources: bool,
-    show_missing_refs: bool,
+    attachment_filters: attachments_view::Filters,
+    attachment_files: Vec<attachments_view::Attachment>,
     manifest: serde_json::Value,
     migration_kinds: BTreeSet<String>,
     migrate_all: bool,
@@ -1335,7 +1344,8 @@ impl VaultApp {
             capture_after: None,
             capture_requested: false,
             show_resources: false,
-            show_missing_refs: false,
+            attachment_filters: attachments_view::Filters::default(),
+            attachment_files: Vec::new(),
             manifest: serde_json::Value::Null,
             migration_saved_kinds: migration_kinds.clone(),
             migration_kinds,
@@ -1488,6 +1498,11 @@ impl VaultApp {
             .unwrap_or_default();
         self.migration_plan = None;
         let images = image_directory(&self.root, &self.prefs.images);
+        self.attachment_files = attachments_view::entries(
+            &self.root,
+            &self.manifest,
+            (!self.prefs.images.is_empty()).then_some(images.as_path()),
+        );
         self.missing_images = self
             .selected
             .map(|i| {
@@ -2286,95 +2301,93 @@ impl VaultApp {
         let mut open = self.show_resources;
         let mut action = None;
         let mut save_policy = false;
-        egui::Window::new("本地附件与迁移").open(&mut open).default_width(760.0).default_height(600.0).show(ctx, |ui| {
-            ui.label("对话原文与分类信息始终保存。下面的附件和命令日志只复制到本地备份目录。");
-            let mut changed = false;
-            ui.heading("备份哪些内容");
-            ui.horizontal_wrapped(|ui| {
-                for (label, kinds) in [
-                    ("仅会话", vec![]),
-                    ("会话和图片", vec!["images"]),
-                    ("所有关联文件", vec!["images", "models", "documents", "code", "logs", "other"]),
-                ] {
-                    let preset: BTreeSet<String> = kinds.into_iter().map(str::to_string).collect();
-                    if ui.selectable_label(self.migration_kinds == preset, label).clicked() {
-                        self.migration_kinds = preset;
-                        changed = true;
-                    }
-                }
-            });
-            ui.horizontal_wrapped(|ui| {
-                for (key, label) in [("images", "图片"), ("models", "GLB / Blender"), ("documents", "文档"), ("code", "代码"), ("logs", "命令 / 日志"), ("other", "其他附件")] {
-                    let mut selected = self.migration_kinds.contains(key);
-                    if ui.checkbox(&mut selected, label).changed() {
-                        changed = true;
-                        if selected { self.migration_kinds.insert(key.into()); } else { self.migration_kinds.remove(key); }
-                    }
-                }
-            });
-            ui.horizontal_wrapped(|ui| {
-                let unsaved = self.migration_kinds != self.migration_saved_kinds;
-                if ui.add_enabled(self.job_receiver.is_none(), egui::Button::new("保存后续备份偏好")).clicked() {
-                    save_policy = true;
-                }
-                ui.label(RichText::new(if unsaved { "有未保存的选择" } else { "已与备份偏好一致" }).small().color(MUTED));
-            });
-            ui.label(RichText::new("保存偏好立即生效于后续备份，不会开始复制或删除现有文件。原始会话快照仍会保存，可能包含内嵌资源。").small().color(MUTED));
-            ui.separator();
-            ui.heading("补齐已有会话的附件");
-            ui.horizontal(|ui| {
-                changed |= ui.selectable_value(&mut self.migrate_all, false, "当前会话").changed();
-                changed |= ui.selectable_value(&mut self.migrate_all, true, "全部会话").changed();
-            });
-            if changed { self.migration_plan = None; }
-            ui.label(RichText::new("只处理会话里已关联的文件；不会扫描或复制整个项目。复制后保留原文件。").small().color(MUTED));
-            if let Some(plan) = &self.migration_plan {
-                let needed = plan["estimated_bytes"].as_u64().unwrap_or(0) as f64 / 1048576.0;
-                let free = plan["free_bytes"].as_u64().unwrap_or(0) as f64 / 1073741824.0;
-                ui.label(format!("{} 个关联文件 · {} 条命令/日志 · 估算新增至多 {needed:.1} MB · 可用 {free:.1} GB", plan["files"], plan["operations"]));
-                if plan["fits"] != true { ui.colored_label(Color32::DARK_RED, "可用空间不足，请减少类型或迁移到更大的磁盘。"); }
-            }
-            ui.horizontal(|ui| {
-                let idle = self.job_receiver.is_none();
-                if ui.add_enabled(idle, egui::Button::new("估算空间")).clicked() { action = Some(true); }
-                let fits = self.migration_plan.as_ref().is_some_and(|v| v["fits"] == true);
-                if ui.add_enabled(idle && fits, egui::Button::new("增量复制到备份目录")).clicked() { action = Some(false); }
-                if !idle { ui.spinner(); }
-            });
-            ui.label(RichText::new(&self.status).small());
-            ui.separator();
-            if let Some(i) = self.selected {
-                ui.heading(&self.catalog.sessions[i].display_title);
-                if let Some(path) = self.local_record_path(i) {
-                    ui.horizontal(|ui| {
-                        if ui.button("关联清单与原始元数据").clicked() { reveal(&path); }
-                        if ui.button("原始对话文本").clicked() { reveal(&path.with_file_name("dialogue.jsonl")); }
-                        if path.with_file_name("operations.jsonl").exists() && ui.button("已备份的命令日志").clicked() { reveal(&path.with_file_name("operations.jsonl")); }
-                    });
-                } else { ui.label("此会话尚未生成本地原文及附件清单，请运行一次增量备份。"); }
-                ui.checkbox(&mut self.show_missing_refs, "显示未找到的路径引用（可能包含历史路径或示例）");
-                egui::ScrollArea::vertical().max_height(350.0).show(ui, |ui| {
-                    if let Some(files) = self.manifest["files"].as_array() {
-                        for file in files {
-                            if !self.show_missing_refs && file["exists"] != true && !file["copy"].is_string() { continue; }
-                            ui.push_id(file["id"].as_str().unwrap_or(""), |ui| {
-                                ui.horizontal(|ui| {
-                                    ui.label(format!("[{}] {}", file["kind"].as_str().unwrap_or(""), file["name"].as_str().unwrap_or("")));
-                                    if let Some(p) = file["copy"].as_str() {
-                                        if let Ok(path) = self.root.join(p).canonicalize() {
-                                            if self.root.canonicalize().ok().is_some_and(|root| path.starts_with(root)) && ui.button("定位副本").clicked() { reveal(&path); }
-                                        }
-                                    }
-                                });
-                                ui.label(RichText::new(file["source"].as_str().unwrap_or("")).small().color(MUTED));
-                                ui.separator();
-                            });
-                        }
-                    }
+        let previous_preview_width = self.prefs.attachment_preview_width;
+        let mut attachment_action = None;
+        egui::Window::new("本地附件与迁移")
+            .open(&mut open).default_width(820.0).default_height(720.0)
+            .max_width((ctx.screen_rect().width() - 48.0).max(320.0))
+            .max_height((ctx.screen_rect().height() - 80.0).max(280.0)).vscroll(true)
+            .show(ctx, |ui| {
+                ui.label("筛选附件，预览文件大小，再选择需要复制的类型。");
+                if let Some(i) = self.selected {
+                    ui.add(egui::Label::new(RichText::new(format!("当前会话 · {}", self.catalog.sessions[i].display_title)).strong()).truncate());
+                    attachment_action = attachments_view::show(ui, &self.attachment_files, &mut self.attachment_filters,
+                        &self.migration_kinds, &mut self.prefs.attachment_preview_width);
+                } else { ui.label("选择一个会话后预览它的附件。"); }
+                ui.separator();
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("复制范围");
+                    let mut changed = ui.selectable_value(&mut self.migrate_all, false, "当前会话").changed();
+                    changed |= ui.selectable_value(&mut self.migrate_all, true, "全部会话").changed();
+                    if changed { self.migration_plan = None; }
                 });
-            }
-        });
+                let labels = attachments_view::KINDS.iter().filter(|(key, _)| self.migration_kinds.contains(*key))
+                    .map(|(_, label)| *label).collect::<Vec<_>>();
+                ui.label(RichText::new(format!("复制类型：{}", if labels.is_empty() { "仅会话，不额外复制附件".into() } else { labels.join("、") })).small().color(MUTED));
+                egui::CollapsingHeader::new("选择类型与后续备份偏好").id_salt("attachment-policy-options").show(ui, |ui| {
+                    let mut changed = false;
+                    ui.horizontal_wrapped(|ui| {
+                        for (label, kinds) in [("仅会话", vec![]), ("会话和图片", vec!["images"]),
+                            ("所有关联文件", vec!["images", "models", "documents", "code", "logs", "other"])] {
+                            let preset: BTreeSet<String> = kinds.into_iter().map(str::to_string).collect();
+                            if ui.selectable_label(self.migration_kinds == preset, label).clicked() {
+                                self.migration_kinds = preset; changed = true;
+                            }
+                        }
+                    });
+                    ui.horizontal_wrapped(|ui| {
+                        for (key, label) in attachments_view::KINDS {
+                            let mut selected = self.migration_kinds.contains(key);
+                            if ui.checkbox(&mut selected, label).changed() {
+                                changed = true;
+                                if selected { self.migration_kinds.insert(key.into()); } else { self.migration_kinds.remove(key); }
+                            }
+                        }
+                    });
+                    if changed { self.migration_plan = None; }
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.add_enabled(self.job_receiver.is_none(), egui::Button::new("保存后续备份偏好")).clicked() { save_policy = true; }
+                        ui.label(RichText::new(if self.migration_kinds == self.migration_saved_kinds { "已与备份偏好一致" } else { "有未保存的选择" }).small().color(MUTED));
+                    });
+                    ui.label(RichText::new("保存偏好只影响后续备份，已有副本保留。原始会话快照可能包含内嵌资源。").small().color(MUTED));
+                });
+                if let Some(plan) = &self.migration_plan {
+                    let needed = plan["estimated_bytes"].as_u64().unwrap_or(0) as f64 / 1048576.0;
+                    let free = plan["free_bytes"].as_u64().unwrap_or(0) as f64 / 1073741824.0;
+                    ui.label(format!("估算新增至多 {needed:.1} MB · 可用 {free:.1} GB · {} 项文件未找到", plan["missing"]));
+                    if plan["fits"] != true { ui.colored_label(Color32::DARK_RED, "可用空间不足，请减少类型或换到更大的磁盘。"); }
+                }
+                ui.horizontal_wrapped(|ui| {
+                    let idle = self.job_receiver.is_none();
+                    if ui.add_enabled(idle, egui::Button::new("估算新增空间")).clicked() { action = Some(true); }
+                    let fits = !self.migration_kinds.is_empty() && self.migration_plan.as_ref().is_some_and(|v| v["fits"] == true);
+                    if ui.add_enabled(idle && fits, egui::Button::new("增量复制到备份目录")).clicked() { action = Some(false); }
+                    if !idle { ui.spinner(); }
+                });
+                ui.label(RichText::new(&self.status).small().color(MUTED));
+                if let Some(path) = self.selected.and_then(|i| self.local_record_path(i)) {
+                    egui::CollapsingHeader::new("原文与关联清单").show(ui, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            if ui.button("关联清单与原始元数据").clicked() { reveal(&path); }
+                            if ui.button("原始对话文本").clicked() { reveal(&path.with_file_name("dialogue.jsonl")); }
+                            if path.with_file_name("operations.jsonl").exists() && ui.button("已备份的命令日志").clicked() { reveal(&path.with_file_name("operations.jsonl")); }
+                        });
+                    });
+                }
+            });
         self.show_resources = open;
+        if previous_preview_width != self.prefs.attachment_preview_width {
+            self.save_preferences();
+        }
+        if let Some(action) = attachment_action {
+            match action {
+                attachments_view::Action::Reveal(path) => reveal(&path),
+                attachments_view::Action::Preview(image) => {
+                    self.preview_image = Some(image);
+                    self.preview_zoom = None;
+                }
+            }
+        }
         if save_policy {
             let kinds = if self.migration_kinds.is_empty() {
                 "none".into()
@@ -3507,6 +3520,9 @@ fn main() -> eframe::Result<()> {
     }
     if !(160..=640).contains(&prefs.thumbnail_width) {
         prefs.thumbnail_width = default_thumbnail_width();
+    }
+    if !(64..=240).contains(&prefs.attachment_preview_width) {
+        prefs.attachment_preview_width = default_attachment_preview_width();
     }
     if let Some(value) = args.windows(2).find(|a| a[0] == "--images") {
         prefs.images = value[1].clone();
