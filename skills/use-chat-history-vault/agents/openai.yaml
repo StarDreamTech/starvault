@@ -1,0 +1,4 @@
+interface:
+  display_name: "星匣助手"
+  short_description: "通过星匣检索本地会话档案、读取历史原文，并备份与迁移附件和 Skill"
+  default_prompt: "使用 $use-chat-history-vault 在星匣中查找与当前问题相关的历史会话，并读取原文核对。"

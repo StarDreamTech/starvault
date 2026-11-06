@@ -1,0 +1,10 @@
+.local/
+__pycache__/
+*.pyc
+.DS_Store
+desktop/target/
+*.app/
+.venv/
+build/
+dist/
+*.egg-info/

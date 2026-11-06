@@ -1,0 +1,4 @@
+interface:
+  display_name: "星匣开发维护"
+  short_description: "维护本地会话备份、分类与附件迁移，以及 Rust 桌面阅读界面"
+  default_prompt: "使用 $chat-history-vault 维护当前星匣项目，完成修改并验证数据保留与阅读体验。"
