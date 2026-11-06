@@ -19,6 +19,7 @@ mod attachments_view;
 mod brand;
 #[cfg(test)]
 mod replies_view_tests;
+mod share;
 mod timeline;
 #[cfg(test)]
 mod timeline_view_tests;
@@ -1243,6 +1244,13 @@ fn setup(ctx: &egui::Context, font_size: f32) {
     ctx.set_style(style);
 }
 
+#[derive(Default, PartialEq)]
+enum SettingsTab {
+    #[default]
+    Images,
+    Share,
+}
+
 struct VaultApp {
     root: PathBuf,
     catalog: Catalog,
@@ -1259,6 +1267,8 @@ struct VaultApp {
     show_details: bool,
     screenshot_select: Option<String>,
     show_settings: bool,
+    settings_tab: SettingsTab,
+    share: share::Panel,
     images_input: String,
     missing_images: usize,
     screenshot: Option<PathBuf>,
@@ -1338,6 +1348,8 @@ impl VaultApp {
             show_details: false,
             screenshot_select: select,
             show_settings: false,
+            settings_tab: SettingsTab::default(),
+            share: share::Panel::default(),
             images_input,
             missing_images: 0,
             screenshot,
@@ -1805,11 +1817,26 @@ impl VaultApp {
         let mut open = self.show_settings;
         let mut apply = false;
         let mut resize = false;
-        egui::Window::new("图片设置")
+        egui::Window::new("设置")
             .open(&mut open)
-            .resizable(false)
-            .default_width(540.0)
+            .default_width(840.0)
+            .default_height(730.0)
+            .max_width((ctx.screen_rect().width() - 64.0).max(480.0))
+            .max_height((ctx.screen_rect().height() - 96.0).max(340.0))
+            .vscroll(true)
             .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.settings_tab, SettingsTab::Images, "图片显示");
+                    ui.selectable_value(&mut self.settings_tab, SettingsTab::Share, "分享软件");
+                });
+                ui.separator();
+                if self.settings_tab == SettingsTab::Share {
+                    if let Some(image) = self.share.show(ui) {
+                        self.preview_image = Some(image);
+                        self.preview_zoom = None;
+                    }
+                    return;
+                }
                 ui.heading("正文缩略图");
                 resize = ui
                     .add(
@@ -2815,7 +2842,7 @@ impl eframe::App for VaultApp {
                     if ctx.screen_rect().width() >= 1100.0 {
                         ui.add_space(20.0);
                         ui.label(
-                            RichText::new("收藏对话，留住灵感。")
+                            RichText::new("你的 AI 记忆，始终属于你。")
                                 .size(12.0)
                                 .color(Color32::from_rgb(183, 196, 219)),
                         );
@@ -2852,8 +2879,13 @@ impl eframe::App for VaultApp {
                                 }
                                 ui.close_menu();
                             }
-                            if ui.button("图片显示设置").clicked() {
+                            if ui.button("设置…").clicked() {
                                 self.images_input = self.prefs.images.clone();
+                                self.show_settings = true;
+                                ui.close_menu();
+                            }
+                            if ui.button("分享软件").clicked() {
+                                self.settings_tab = SettingsTab::Share;
                                 self.show_settings = true;
                                 ui.close_menu();
                             }
@@ -3411,6 +3443,7 @@ impl eframe::App for VaultApp {
                         .clicked()
                     {
                         self.images_input = self.prefs.images.clone();
+                        self.settings_tab = SettingsTab::Images;
                         self.show_settings = true;
                     }
                 }
@@ -3605,6 +3638,10 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(move |cc| {
             let mut app = VaultApp::new(cc, root, prefs, select, screenshot, filters);
+            app.show_settings = args.iter().any(|a| a == "--share");
+            if app.show_settings {
+                app.settings_tab = SettingsTab::Share;
+            }
             app.show_resources = args.iter().any(|a| a == "--resources");
             app.show_skills = args.iter().any(|a| a == "--skills");
             if app.show_skills {

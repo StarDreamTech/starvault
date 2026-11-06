@@ -1,0 +1,192 @@
+{
+  "texts": [
+    {
+      "locale": "zh-CN",
+      "kind": "short",
+      "title": "简短推荐",
+      "body": "推荐一个本地优先的 AI 对话档案工具：星匣 StarVault。\n\n你的 AI 记忆，始终属于你。\n\n把分散在多个 AI 客户端里的对话整理成可搜索的档案，增量备份，按需保存图片、文件和 Skill。换电脑时，已经备份的积累也能一起带走。\n\n提供 MCP、CLI 和 Skill，方便 AI 助手按任务检索已归档的历史。\n\n项目与下载：https://github.com/cpython666/starvault"
+    },
+    {
+      "locale": "zh-CN",
+      "kind": "detailed",
+      "title": "产品介绍",
+      "body": "星匣 StarVault｜你的 AI 记忆，始终属于你。\n\n和 AI 一起讨论过的方案、做过的决定、保存过的文件，值得成为自己的长期积累。\n\n• 汇聚 AI 对话：支持 Codex、Claude Code、Claude Desktop、WorkBuddy、OpenClaw、DeepSeek Harness，以及手动导入的 ChatGPT。Claude Projects 只收集本地缓存覆盖到的部分内容。\n• 增量备份与回溯：只更新变化的会话，按项目搜索、查看时间线、回到原始对话；来源消失后仍保留已归档内容。\n• 按需保留附件：选择仅会话、会话和图片，或自选文档、模型、代码等类型；先预览文件与空间，再增量复制，Skill 也可备份和恢复。\n• 换电脑也能带走：复制完整备份目录，保留对话和已备份的图片、文件及 Skill；缺失或尚未复制的原文件仍需在旧电脑补齐。\n• 为助手准备历史资料：通过 MCP、CLI 与使用者 Skill 查询已有档案、分页阅读原文。AI 如何理解和使用这些资料，由接入的客户端决定。\n\n本地优先；可选私有 GitHub 仓库同步对话文字和索引。附件和原始记录保存在本地，数据与备份不是加密保险箱。\n\n桌面安装包目前提供 Apple Silicon macOS 版；Python 后端通过 macOS、Windows、Linux 的 CI 回归。当前版本功能与平台范围以项目说明为准。\n\n项目、源码与下载：https://github.com/cpython666/starvault"
+    },
+    {
+      "locale": "en-US",
+      "kind": "short",
+      "title": "简短推荐",
+      "body": "Meet StarVault — a local-first archive for your AI conversations.\n\nYour AI memories. Always yours.\n\nBring conversations from multiple AI clients into a searchable archive. Back up changes, choose which images, files and Skills to keep, and take your saved work to a new computer.\n\nMCP, CLI and a companion Skill let your AI assistant search archived context when you need it.\n\nProject and downloads: https://github.com/cpython666/starvault"
+    },
+    {
+      "locale": "en-US",
+      "kind": "detailed",
+      "title": "产品介绍",
+      "body": "StarVault | Your AI memories. Always yours.\n\nKeep the plans, decisions and files you create with AI as a library of your own.\n\n• Bring conversations together: Codex, Claude Code, Claude Desktop, WorkBuddy, OpenClaw and DeepSeek Harness, plus manually imported ChatGPT exports. Claude Projects coverage is limited to messages available in the local cache.\n• Back up changes and retrace your work: search projects, browse timelines and return to original conversations. Previously archived content stays available when a source disappears.\n• Choose your attachments: keep conversations only, add images, or select documents, models, code and other files. Preview sizes before copying. Back up and restore Skill folders too.\n• Move your saved context: copy the complete archive folder to keep conversations and already-backed-up images, files and Skills. Missing or uncopied originals still need to be collected on the old computer.\n• Give your assistant useful history: MCP, CLI and a companion Skill provide search and paginated access to archived originals. The connected client decides how to use that context.\n\nLocal-first, with optional text/index sync to a private GitHub repository. Attachments and raw records stay local; backups are not encrypted by StarVault.\n\nThe desktop installer currently supports Apple Silicon macOS. The Python backend passes CI checks on macOS, Windows and Linux. See each release for its supported platforms and features.\n\nProject, source and downloads: https://github.com/cpython666/starvault"
+    }
+  ],
+  "images": [
+    {
+      "id": "overview",
+      "locale": "zh-CN",
+      "title": "产品总览",
+      "description": "汇聚 AI 对话，增量备份、搜索与回溯。",
+      "filename": "星匣-产品总览.png",
+      "headline": "你的 AI 记忆，\n始终属于你。",
+      "subtitle": "把分散的对话，收进自己的长期档案。",
+      "features": [
+        [
+          "汇聚对话",
+          "多个 AI 客户端，一处查找"
+        ],
+        [
+          "增量留存",
+          "变化的会话，持续备份"
+        ],
+        [
+          "按需迁移",
+          "图片、文件与 Skill 自己选"
+        ]
+      ],
+      "width": 1080,
+      "height": 1440,
+      "bytes": 365684,
+      "sha256": "5243367ce477a199f4086177d47aff1f788c5a709a33cf2e17f120adecac9627"
+    },
+    {
+      "id": "ownership",
+      "locale": "zh-CN",
+      "title": "换机与数据自主",
+      "description": "完整迁移备份目录，把已保存的积累带到新电脑。",
+      "filename": "星匣-数据与迁移.png",
+      "headline": "换一台电脑，\n积累也能带走。",
+      "subtitle": "对话里的思考和成果，值得由自己保管。",
+      "features": [
+        [
+          "先归档",
+          "保存可阅读的对话原文"
+        ],
+        [
+          "再补齐",
+          "按需备份图片、文件与 Skill"
+        ],
+        [
+          "一起带走",
+          "整体复制备份目录到新电脑"
+        ]
+      ],
+      "width": 1080,
+      "height": 1440,
+      "bytes": 358943,
+      "sha256": "77dad4a066fada6c0115a9ed8735670772b9203abe5cf14746c5a228aa9fd71f"
+    },
+    {
+      "id": "context",
+      "locale": "zh-CN",
+      "title": "为 AI 准备历史",
+      "description": "通过 MCP、CLI 与 Skill，把可查证的历史提供给助手。",
+      "filename": "星匣-AI历史资料.png",
+      "headline": "给更懂你的助手，\n一份有来处的记忆。",
+      "subtitle": "需要上下文时，找得到，也能回到原文。",
+      "features": [
+        [
+          "MCP",
+          "让客户端按任务查询档案"
+        ],
+        [
+          "CLI",
+          "搜索与原文阅读，一处调用"
+        ],
+        [
+          "Skill",
+          "指导助手查找并核对历史"
+        ]
+      ],
+      "width": 1080,
+      "height": 1440,
+      "bytes": 362320,
+      "sha256": "a1716b02f4446ac2d394eaa37ab0e11a55b1ced5f3ad0d1dc2b900f321af2d9e"
+    },
+    {
+      "id": "overview-en",
+      "locale": "en-US",
+      "title": "产品总览",
+      "description": "A searchable archive for AI conversations, backed up incrementally. Labelled sample UI.",
+      "filename": "StarVault-Overview.png",
+      "headline": "Your AI memories.\nAlways yours.",
+      "subtitle": "Turn scattered conversations into a library of your own.",
+      "features": [
+        [
+          "Bring it together",
+          "Multiple AI clients. One archive."
+        ],
+        [
+          "Keep the changes",
+          "Back up conversations as they change."
+        ],
+        [
+          "Choose what moves",
+          "Images, files and Skills are up to you."
+        ]
+      ],
+      "width": 1080,
+      "height": 1440,
+      "bytes": 368817,
+      "sha256": "6f4e8ad3625b3fa2a0ddd09faaff42ef48f47b2ee9fa1bb832d76cb90909439c"
+    },
+    {
+      "id": "ownership-en",
+      "locale": "en-US",
+      "title": "换机与数据自主",
+      "description": "Take saved conversations and already-backed-up files to your next computer.",
+      "filename": "StarVault-Your-data.png",
+      "headline": "A new computer.\nThe same progress.",
+      "subtitle": "Keep the work and ideas you have built with AI.",
+      "features": [
+        [
+          "Archive it",
+          "Keep readable conversation originals."
+        ],
+        [
+          "Add what matters",
+          "Back up the images, files and Skills you need."
+        ],
+        [
+          "Take it with you",
+          "Copy your complete archive folder."
+        ]
+      ],
+      "width": 1080,
+      "height": 1440,
+      "bytes": 362424,
+      "sha256": "379d1f6d8cddb0bcb04387b7b6c81bf0bdccb7d45c0dedc38132074f140654eb"
+    },
+    {
+      "id": "context-en",
+      "locale": "en-US",
+      "title": "为 AI 准备历史",
+      "description": "MCP, CLI and a companion Skill make archived context available to your assistant.",
+      "filename": "StarVault-AI-context.png",
+      "headline": "Give your AI context.\nKeep the source.",
+      "subtitle": "Find useful history, then trace it to the original conversation.",
+      "features": [
+        [
+          "MCP",
+          "Let your client query the archive."
+        ],
+        [
+          "CLI",
+          "Search and read original conversations."
+        ],
+        [
+          "Skill",
+          "Guide your assistant to useful history."
+        ]
+      ],
+      "width": 1080,
+      "height": 1440,
+      "bytes": 361422,
+      "sha256": "95c101790b2d740fc2d785854731c926fed561d54d2388215f811c0a8c2c5cce"
+    }
+  ]
+}

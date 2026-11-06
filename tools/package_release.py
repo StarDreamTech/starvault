@@ -22,10 +22,11 @@ config.read(root / 'setup.cfg')
 version = config['metadata']['version']
 paths = set(root.glob('*.py'))
 paths.update(root / name for name in ('README.md', 'LICENSE', '.gitignore', 'setup.cfg', 'pyproject.toml', 'MANIFEST.in'))
-for pattern in ('desktop/Cargo.*', 'desktop/build_macos.py', 'desktop/src/*.rs', 'assets/*',
+for pattern in ('desktop/Cargo.*', 'desktop/build_macos.py', 'desktop/src/*.rs', 'assets/*.png', 'assets/*.svg', 'assets/*.icns',
+                'assets/share/*.png', 'assets/share/catalog.json',
                 'skills/use-chat-history-vault/SKILL.md', 'skills/use-chat-history-vault/agents/*.yaml',
                 '.agents/skills/chat-history-vault/SKILL.md', '.agents/skills/chat-history-vault/agents/*.yaml',
-                '.github/workflows/*.yml', 'tools/*.py', 'tools/*.swift'):
+                '.github/workflows/*.yml', 'docs/*.md', 'tools/*.py', 'tools/*.swift'):
     paths.update(root.glob(pattern))
 for path in sorted(paths):
     if not path.is_file() or path.is_symlink():
