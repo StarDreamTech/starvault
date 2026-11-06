@@ -92,7 +92,7 @@ chat-history-vault skill-path
 
 `call TOOL` 支持 `--arguments` 或 `--arguments-file`，调用写入工具时需加 `--allow-write`。`mcp` 沿用 `vault_mcp.py` 的选项，直接运行 `chat-history-vault mcp` 会等待客户端通过标准输入输出通信。原有 `export`、`sync`、`migrate`、`skills` 等显式操作命令保留原行为，不要求该开关。各命令的完整参数见 `chat-history-vault COMMAND --help`。
 
-配置目录按以下优先级选择：环境变量 `CHAT_HISTORY_VAULT_CONFIG_DIR`；源码目录的 `.local/`（源码有 `.git` 或已有 `.local/config.json`）；最后使用 macOS 的 `~/Library/Application Support/ChatHistoryVault/tool/.local/`，或 Windows/Linux 的 `~/ChatHistoryVault/tool/.local/`。配置、导入缓存、锁和运行状态保存在同一目录，不写入 Python 安装目录。生成的 MCP 配置和新安装的 macOS 定时任务会携带所选配置目录；升级或重新安装 CLI 不迁移、删除已有档案。Windows/Linux 原生环境仍待验证。
+配置目录按以下优先级选择：环境变量 `CHAT_HISTORY_VAULT_CONFIG_DIR`；源码目录的 `.local/`（源码有 `.git` 或已有 `.local/config.json`）；最后使用 macOS 的 `~/Library/Application Support/ChatHistoryVault/tool/.local/`，或 Windows/Linux 的 `~/ChatHistoryVault/tool/.local/`。配置、导入缓存、锁和运行状态保存在同一目录，不写入 Python 安装目录。生成的 MCP 配置和新安装的 macOS 定时任务会携带所选配置目录；升级或重新安装 CLI 不迁移、删除已有档案。Python 后端已通过 macOS / Windows / Linux 的 CI 临时数据回归；源应用真实数据读取目前只在 macOS 本机核验。
 
 ## Rust 桌面面板
 
@@ -159,7 +159,7 @@ cargo run --release --locked -- --archive /path/to/backup --check
 
 Claude Desktop 默认目录为 macOS 的 `~/Library/Application Support/Claude`、Windows 的 `%APPDATA%/Claude`（未设置时使用 `~/AppData/Roaming/Claude`）、Linux 的 `$XDG_CONFIG_HOME/Claude`（未设置时使用 `~/.config/Claude`），同时检查同级 `Claude-3p`。可用 `init --claude-desktop-home /path/to/Claude` 配置；未配置时采用 `CLAUDE_DESKTOP_HOME` 或上述默认位置。在这些根目录中扫描两类会话目录和 `Cache/Cache_Data`；缓存只读提取白名单 Code Projects 消息响应，不复制 HTTP 元数据、登录凭据或整个浏览器缓存。
 
-该来源保留 `claude-ai-chat`、`sibling-1p-code`、`terminal-cli` 等导入标记，以及 `coverage=local_imported_copy` 或 `local_desktop_session`。已有云端导入副本不等于全部云端历史；没有正文文件的元数据不会生成空会话，定时任务也不会登录 Claude 抓取新聊天。同一个原始 ID 在不同账号或产品目录下分别归档，搬迁整个来源目录后保持 ID 稳定。macOS 本地目录已验证；Windows/Linux 默认路径有模拟测试，原生环境仍待验证。
+该来源保留 `claude-ai-chat`、`sibling-1p-code`、`terminal-cli` 等导入标记，以及 `coverage=local_imported_copy` 或 `local_desktop_session`。已有云端导入副本不等于全部云端历史；没有正文文件的元数据不会生成空会话，定时任务也不会登录 Claude 抓取新聊天。同一个原始 ID 在不同账号或产品目录下分别归档，搬迁整个来源目录后保持 ID 稳定。macOS 本地目录已验证；Windows/Linux 默认路径有模拟测试，后端通过三平台原生 CI 临时数据回归；源应用真实数据仍需在对应系统核验。
 
 Code Projects 沿用 `claude-desktop` 来源，标记 `source=code-projects-cache`、`coverage=partial_cache`。按 channel、thread 和 message ID 增量合并已观察到的消息与更新；缓存被应用清理后保留已有快照，不因本轮缺少消息而删除旧记录。缓存可能只覆盖打开过的部分会话或线程，不代表全账号历史，也不能据此认定对话已经结束。附件仅保留缓存中已有的引用和描述，不保证附件二进制已在本地或已迁移，不自动请求远程附件。
 
