@@ -253,7 +253,7 @@ pub fn show(
     ui.horizontal_wrapped(|ui| {
         egui::ComboBox::from_id_salt("attachment-kind")
             .selected_text(if filters.kind == "selected" {
-                "按备份类型"
+                "按复制类型"
             } else if filters.kind.is_empty() {
                 "全部类型"
             } else {
@@ -264,7 +264,7 @@ pub fn show(
                     .unwrap_or("其他附件")
             })
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut filters.kind, "selected".into(), "按上方备份类型");
+                ui.selectable_value(&mut filters.kind, "selected".into(), "按所选复制类型");
                 ui.selectable_value(&mut filters.kind, String::new(), "全部类型");
                 for (key, label) in KINDS {
                     ui.selectable_value(&mut filters.kind, key.into(), label);
@@ -340,7 +340,7 @@ pub fn show(
         ))
         .strong(),
     );
-    ui.label(RichText::new("大小取自最近的附件清单；精确新增空间以估算为准。列表筛选仅影响预览，复制按上方类型与会话范围执行。")
+    ui.label(RichText::new("大小取自最近的附件清单；精确新增空间以估算为准。列表筛选仅影响预览，复制按所选类型与会话范围执行。")
         .small().color(MUTED));
     if rows.is_empty() {
         ui.label("没有匹配的附件，可调整类型、状态或大小条件。");
