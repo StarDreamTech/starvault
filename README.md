@@ -22,6 +22,8 @@ open -a StarVault
 
 源码、版本与安装包见 [GitHub Releases](https://github.com/cpython666/starvault/releases)。公开软件仓库不存放聊天内容；备份同步会校验目标为私有仓库。
 
+新版 Homebrew 若提示未信任此安装源，核对 [Formula / Cask](https://github.com/cpython666/homebrew-tap) 后，可仅信任本产品：`brew trust --formula cpython666/tap/starvault` 和 `brew trust --cask cpython666/tap/starvault`，再继续安装。
+
 把 Codex、Claude Code、Claude Desktop、WorkBuddy、OpenClaw、DeepSeek Harness 的本地会话及导入的 ChatGPT 对话备份为可阅读、可筛选的档案。Claude Desktop 包括已经保存在本地的云端聊天导入副本，以及 Code Projects 的本地缓存消息。**GitHub 只上传对话正文与分类索引；原始消息记录、附件、命令和日志留在本地。**
 
 - 软件仓库的 `main`：工具代码；以下会话分支创建在独立配置的私有备份仓库中。

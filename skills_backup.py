@@ -77,8 +77,9 @@ def _open_regular(path, expected=None):
     stream = os.fdopen(os.open(path, flags), 'rb')
     if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode) or (
             expected is not None and _state(os.fstat(stream.fileno())) != expected):
+        actual_state = _state(os.fstat(stream.fileno()))
         stream.close()
-        raise RuntimeError('Skill 源文件正在变化，请重试：' + str(path))
+        raise RuntimeError('Skill 源文件正在变化，请重试：' + str(path) + ' ' + repr((expected, actual_state, _state(os.stat(path)))))
     return stream
 
 

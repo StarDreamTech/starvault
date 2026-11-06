@@ -185,7 +185,7 @@ def _read_response(path):
     flags = os.O_RDONLY | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0)
     with os.fdopen(os.open(path, flags), 'rb') as source:
         if _stamp(os.fstat(source.fileno())) != _stamp(before):
-            raise CacheReadError('cache entry changed before reading')
+            raise CacheReadError('cache entry changed before reading: ' + repr((_stamp(before), _stamp(os.fstat(source.fileno())))))
         header = source.read(24)
         if len(header) != 24:
             return None

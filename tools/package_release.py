@@ -2,6 +2,7 @@
 """Package an explicit code-only tree; never copy repository history or archives."""
 import argparse
 import configparser
+import gzip
 import hashlib
 from pathlib import Path
 import shutil
@@ -34,10 +35,14 @@ for path in sorted(paths):
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(path, target)
 archive = output / f'StarVault-{version}-source.tar.gz'
-with tarfile.open(archive, 'w:gz') as bundle:
+with archive.open('wb') as raw, gzip.GzipFile(filename='', fileobj=raw, mode='wb', mtime=0) as compressed, tarfile.open(fileobj=compressed, mode='w') as bundle:
     for path in sorted(paths):
         relative = path.relative_to(root)
-        bundle.add(source / relative, arcname=f'starvault-{version}/{relative}', recursive=False)
+        info = bundle.gettarinfo(source / relative, arcname=f'starvault-{version}/{relative}')
+        info.mtime = info.uid = info.gid = 0
+        info.uname = info.gname = ''
+        with (source / relative).open('rb') as stream:
+            bundle.addfile(info, stream)
 artifacts = [archive]
 if args.app:
     app = args.app.expanduser().resolve()
