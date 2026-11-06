@@ -54,8 +54,10 @@ def _message_url(key):
 
 
 def _stamp(value):
+    # Windows stat/fstat disagree on legacy ctime after writes; birthtime is stable.
     return (value.st_dev, value.st_ino, value.st_size,
-            value.st_mtime_ns, value.st_ctime_ns)
+            value.st_mtime_ns,
+            getattr(value, 'st_birthtime_ns', 0) if os.name == 'nt' else value.st_ctime_ns)
 
 
 def _regular(value):
@@ -185,7 +187,7 @@ def _read_response(path):
     flags = os.O_RDONLY | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0)
     with os.fdopen(os.open(path, flags), 'rb') as source:
         if _stamp(os.fstat(source.fileno())) != _stamp(before):
-            raise CacheReadError('cache entry changed before reading: ' + repr((_stamp(before), _stamp(os.fstat(source.fileno())))))
+            raise CacheReadError('cache entry changed before reading')
         header = source.read(24)
         if len(header) != 24:
             return None

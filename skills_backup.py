@@ -66,8 +66,10 @@ def _validate_paths(entries):
 
 
 def _state(info):
+    # Legacy ctime differs between Windows stat/fstat; still check identity and mtime.
     return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns,
-            info.st_ctime_ns, stat.S_IMODE(info.st_mode))
+            getattr(info, 'st_birthtime_ns', 0) if os.name == 'nt' else info.st_ctime_ns,
+            stat.S_IMODE(info.st_mode))
 
 
 def _open_regular(path, expected=None):
@@ -77,9 +79,8 @@ def _open_regular(path, expected=None):
     stream = os.fdopen(os.open(path, flags), 'rb')
     if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode) or (
             expected is not None and _state(os.fstat(stream.fileno())) != expected):
-        actual_state = _state(os.fstat(stream.fileno()))
         stream.close()
-        raise RuntimeError('Skill 源文件正在变化，请重试：' + str(path) + ' ' + repr((expected, actual_state, _state(os.stat(path)))))
+        raise RuntimeError('Skill 源文件正在变化，请重试：' + str(path))
     return stream
 
 
