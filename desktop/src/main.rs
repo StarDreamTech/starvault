@@ -19,6 +19,8 @@ mod attachments_view;
 mod brand;
 #[cfg(test)]
 mod replies_view_tests;
+#[cfg(test)]
+mod settings_view_tests;
 mod share;
 mod timeline;
 #[cfg(test)]
@@ -1244,11 +1246,58 @@ fn setup(ctx: &egui::Context, font_size: f32) {
     ctx.set_style(style);
 }
 
-#[derive(Default, PartialEq)]
+#[derive(Clone, Copy, Default, PartialEq)]
 enum SettingsTab {
     #[default]
     Images,
     Share,
+}
+
+fn settings_layout(
+    ui: &mut egui::Ui,
+    mut selected: SettingsTab,
+    content: impl FnOnce(&mut egui::Ui, SettingsTab),
+) -> SettingsTab {
+    let height = ui.available_height().clamp(280.0, 660.0);
+    ui.horizontal_top(|ui| {
+        egui::Frame::new()
+            .fill(PAPER)
+            .corner_radius(10)
+            .inner_margin(10)
+            .show(ui, |ui| {
+                ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                    ui.set_width(140.0);
+                    ui.set_min_height(height - 20.0);
+                    ui.label(RichText::new("设置分类").small().color(MUTED));
+                    ui.add_space(8.0);
+                    for (tab, title) in [
+                        (SettingsTab::Images, "图片显示"),
+                        (SettingsTab::Share, "分享软件"),
+                    ] {
+                        if ui
+                            .add_sized(
+                                [140.0, 40.0],
+                                egui::SelectableLabel::new(selected == tab, title),
+                            )
+                            .clicked()
+                        {
+                            selected = tab;
+                        }
+                    }
+                });
+            });
+        ui.add_space(8.0);
+        ui.vertical(|ui| {
+            ui.set_width(ui.available_width());
+            egui::ScrollArea::vertical()
+                .id_salt(("settings-content", selected as u8))
+                .max_height(height)
+                .min_scrolled_height(height)
+                .auto_shrink([false, false])
+                .show(ui, |ui| content(ui, selected));
+        });
+    });
+    selected
 }
 
 struct VaultApp {
@@ -1819,81 +1868,79 @@ impl VaultApp {
         let mut resize = false;
         egui::Window::new("设置")
             .open(&mut open)
-            .default_width(840.0)
+            .default_width(1020.0)
             .default_height(730.0)
+            .min_width(680.0)
             .max_width((ctx.screen_rect().width() - 64.0).max(480.0))
             .max_height((ctx.screen_rect().height() - 96.0).max(340.0))
-            .vscroll(true)
+            .vscroll(false)
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.selectable_value(&mut self.settings_tab, SettingsTab::Images, "图片显示");
-                    ui.selectable_value(&mut self.settings_tab, SettingsTab::Share, "分享软件");
-                });
-                ui.separator();
-                if self.settings_tab == SettingsTab::Share {
-                    if let Some(image) = self.share.show(ui) {
-                        self.preview_image = Some(image);
-                        self.preview_zoom = None;
+                self.settings_tab = settings_layout(ui, self.settings_tab, |ui, tab| {
+                    if tab == SettingsTab::Share {
+                        if let Some(image) = self.share.show(ui) {
+                            self.preview_image = Some(image);
+                            self.preview_zoom = None;
+                        }
+                        return;
                     }
-                    return;
-                }
-                ui.heading("正文缩略图");
-                resize = ui
-                    .add(
-                        egui::Slider::new(&mut self.prefs.thumbnail_width, 160..=640)
-                            .step_by(40.0)
-                            .text("最大宽度"),
-                    )
-                    .changed();
-                ui.label(format!(
-                    "最多 {} × {} · 保持比例，不裁切 · 点击图片预览原图",
-                    self.prefs.thumbnail_width,
-                    self.prefs.thumbnail_width * 3 / 4
-                ));
-                ui.separator();
-                ui.heading("图片文件夹");
-                ui.label("选择已迁移的 images 文件夹，所有会话将自动按图片文件名关联预览。");
-                ui.label(
-                    RichText::new("图片文件名保持不变即可，不会复制或上传图片。")
+                    ui.heading("正文缩略图");
+                    resize = ui
+                        .add(
+                            egui::Slider::new(&mut self.prefs.thumbnail_width, 160..=640)
+                                .step_by(40.0)
+                                .text("最大宽度"),
+                        )
+                        .changed();
+                    ui.label(format!(
+                        "最多 {} × {} · 保持比例，不裁切 · 点击图片预览原图",
+                        self.prefs.thumbnail_width,
+                        self.prefs.thumbnail_width * 3 / 4
+                    ));
+                    ui.separator();
+                    ui.heading("图片文件夹");
+                    ui.label("选择已迁移的 images 文件夹，所有会话将自动按图片文件名关联预览。");
+                    ui.label(
+                        RichText::new("图片文件名保持不变即可，不会复制或上传图片。")
+                            .small()
+                            .color(MUTED),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.images_input)
+                            .desired_width(f32::INFINITY)
+                            .hint_text("留空使用备份目录下的 images"),
+                    );
+                    ui.horizontal(|ui| {
+                        if ui.button("浏览文件夹…").clicked() {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .set_directory(image_directory(&self.root, &self.prefs.images))
+                                .pick_folder()
+                            {
+                                self.images_input = path.to_string_lossy().to_string();
+                            }
+                        }
+                        if ui.button("恢复默认").clicked() {
+                            self.images_input.clear();
+                        }
+                        let valid = image_directory(&self.root, self.images_input.trim()).is_dir();
+                        if ui
+                            .add_enabled(valid, egui::Button::new("应用并预览"))
+                            .clicked()
+                        {
+                            apply = true;
+                        }
+                        if !valid {
+                            ui.colored_label(Color32::DARK_RED, "文件夹不存在");
+                        }
+                    });
+                    ui.label(
+                        RichText::new(format!(
+                            "当前：{}",
+                            image_directory(&self.root, &self.prefs.images).display()
+                        ))
                         .small()
                         .color(MUTED),
-                );
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.images_input)
-                        .desired_width(f32::INFINITY)
-                        .hint_text("留空使用备份目录下的 images"),
-                );
-                ui.horizontal(|ui| {
-                    if ui.button("浏览文件夹…").clicked() {
-                        if let Some(path) = rfd::FileDialog::new()
-                            .set_directory(image_directory(&self.root, &self.prefs.images))
-                            .pick_folder()
-                        {
-                            self.images_input = path.to_string_lossy().to_string();
-                        }
-                    }
-                    if ui.button("恢复默认").clicked() {
-                        self.images_input.clear();
-                    }
-                    let valid = image_directory(&self.root, self.images_input.trim()).is_dir();
-                    if ui
-                        .add_enabled(valid, egui::Button::new("应用并预览"))
-                        .clicked()
-                    {
-                        apply = true;
-                    }
-                    if !valid {
-                        ui.colored_label(Color32::DARK_RED, "文件夹不存在");
-                    }
+                    );
                 });
-                ui.label(
-                    RichText::new(format!(
-                        "当前：{}",
-                        image_directory(&self.root, &self.prefs.images).display()
-                    ))
-                    .small()
-                    .color(MUTED),
-                );
             });
         if resize {
             for card in &mut self.cards {

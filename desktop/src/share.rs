@@ -239,7 +239,9 @@ impl Panel {
                 .id_salt("share-copy")
                 .max_height(340.0)
                 .show(left, |ui| {
-                    ui.add(egui::Label::new(&body).wrap().selectable(true));
+                    ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                        ui.add(egui::Label::new(&body).wrap().selectable(true));
+                    });
                 });
             left.add_space(10.0);
             left.horizontal_wrapped(|ui| {

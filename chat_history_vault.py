@@ -10,7 +10,7 @@ import vault
 import vault_mcp
 
 
-VERSION = '0.1.2'
+VERSION = '0.1.3'
 LEGACY = {
     'init': 'Configure backup sources and the private repository',
     'export': 'Back up conversations locally, without uploading',
