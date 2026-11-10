@@ -117,6 +117,8 @@ macOS 默认工具和备份位于 `~/Library/Application Support/ChatHistoryVaul
 
 版本号同步 `setup.cfg`、`chat_history_vault.py`、`vault_mcp.py` 的 MCP serverInfo、`desktop/Cargo.toml`、`desktop/Cargo.lock` 与 `desktop/build_macos.py` 的 bundle 版本；bundle build number 单独递增。先用 `desktop/build_macos.py --output` 生成并签名应用，再用 `tools/package_release.py --output --app` 生成明确白名单的源包、macOS arm64 ZIP 和 `SHA256SUMS`；源包包含根目录 `package.json`，保留预览快捷命令。Homebrew Formula 与 Cask 的版本和哈希分别对应源包与应用 ZIP。
 
+2026-11-10 已发布 `v0.1.4`，发布提交 `e4e645d`，Homebrew tap 提交 `f0a2b11`；包含对话阅读、元数据折叠、独立筛选栏与预览快捷命令。Python 122 项检查（2 项跳过）、Rust release 36 项测试通过。源包 62 个文件逐一与发布提交核对，公开资产摘要与本机 SHA256 一致；本机通过 Homebrew 实际升级 Formula 和 Cask，`brew test`、安装后 CLI/Skill/空归档查询、应用版本与签名校验通过。桌面包仅 macOS arm64，仍为临时签名、未公证。
+
 附件偏好通过 `resources.save_policy` 保存，CLI 为 `attachment-policy`，MCP 为 `get_backup_preferences` / `set_backup_preferences`。空 kinds 表示停止额外复制附件，已有副本继续保留；保存偏好不能顺带开始迁移。桌面“补齐已有会话的附件”仍先估算空间再复制。原始会话快照可能自带内嵌资源，不把仅会话模式描述为删除原文内的图片。
 
 附件面板优先显示当前会话文件：名称/路径、类型、状态、大小筛选，单项与汇总大小、可调缩略图。原文清单中的 assets 也应列入并按副本路径去重；只在校验过的归档对象或显式图片目录中预览。不要把未知大小当零字节，不把列表筛选误称为复制范围，精确新增空间沿用已有估算。缩略图加载器在应用初始化时注册，不能依赖正文 Markdown 是否已渲染。
