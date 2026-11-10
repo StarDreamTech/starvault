@@ -6,6 +6,8 @@
 
 产品原名为 Chat History Vault（会话档案）。软件代码发布于 [cpython666/starvault](https://github.com/cpython666/starvault)，聊天备份使用用户自行配置的私有仓库。`starvault` 与 `chat-history-vault` 命令均可使用；Python 模块、MCP 服务标识、Skill 标识和数据目录保持兼容。
 
+桌面主窗口右上角的 GitHub 图标打开软件的公开源码仓库，不是聊天备份仓库。「管理 → 关于与反馈」（或设置中的同名分类）提供仓库及问题反馈链接；反馈公开，请勿上传私人对话、附件或凭据。
+
 <p align="center"><img src="assets/starvault-256.png" width="128" alt="星匣 StarVault 图标：星星落入匣子"></p>
 
 ## Homebrew 安装
@@ -98,9 +100,9 @@ chat-history-vault skill-path
 
 `desktop/` 是 Rust + egui 编写的原生桌面阅读器，直接读取同一份本地备份，不需要启动网页服务器。支持：
 
-- 会话导航与正文双栏布局，紧凑的深星蓝品牌栏搭配金色星匣标记；会话列表以靛蓝色标示选中项。
+- 筛选、项目/会话列表、时间线/正文三栏布局，紧凑的深星蓝品牌栏搭配金色星匣标记；会话列表以靛蓝色标示选中项。筛选栏和列表分别调整宽度、独立滚动，窄窗口为正文保留阅读空间。
 - 全文搜索常驻会话栏顶部，多个关键词同时匹配；macOS 按 `Cmd+K`、Windows/Linux 按 `Ctrl+K` 聚焦搜索框。
-- 会话栏顶部“筛选”菜单提供电脑、对话来源（Codex / Claude / Claude Desktop / WorkBuddy / OpenClaw / DeepSeek Harness / ChatGPT）、模型、会话类型、原始标签、项目和更新时间条件；菜单收起后仍显示已启用条件数。
+- 最左侧常驻筛选栏，直接点选对话来源（Codex / Claude / Claude Desktop / WorkBuddy / OpenClaw / DeepSeek Harness / ChatGPT）和更新时间；电脑、项目、模型、会话类型、原始标签的下拉框持续可见。已选条件显示在栏内“已筛选”区域，点击条件可单独移除；顶部“清除”保留搜索文字和归档标签页。
 - “最近 / 项目分组 / 时间线”切换；项目可展开查看所属会话，Codex 置顶项目和置顶会话优先显示。各视图都保留“未归档 / 已归档 / 全部”标签页。
 - 项目时间线汇总同一项目的多段会话，按“需求、决定、成果、问题、修复”整理关键节点。可按节点类型筛选、切换时间顺序，并通过“查看原对话”定位到对应消息；左侧会话筛选同样生效。
 - Markdown 阅读、代码块、表格、本地原图；图文/纯文字切换。
@@ -118,6 +120,15 @@ chat-history-vault skill-path
 - 每分钟刷新索引；图片按需加载，切换会话后释放上一会话的图片缓存。
 
 浏览和迁移均不修改原始聊天，不执行历史命令。“管理 → 附件与迁移”只调用本机备份工具复制所选文件，“导入 ChatGPT”只进行本地导入；后续定时同步才上传对话文字。`--check` 可以无窗口验证备份索引。
+
+开发与预览在 `starvault` 软件仓库中进行，`chat-history-vault` 私有仓库用于聊天备份。软件仓库根目录提供以下快捷命令（需要 Rust 和 npm，无需安装 npm 依赖）：
+
+```sh
+npm run preview           # 编译并启动当前 StarVault 源码
+npm run preview:timeline  # 编译并启动，直接进入时间线页面
+```
+
+快捷命令调用 Cargo，读取已配置的本地归档；不会触发源会话导出或备份同步。
 
 macOS（需要 Rust 1.88+ 和 Xcode Command Line Tools）构建：
 

@@ -17,6 +17,7 @@ use std::{
 
 mod attachments_view;
 mod brand;
+mod filters_view;
 #[cfg(test)]
 mod replies_view_tests;
 #[cfg(test)]
@@ -1251,6 +1252,7 @@ enum SettingsTab {
     #[default]
     Images,
     Share,
+    About,
 }
 
 fn settings_layout(
@@ -1273,6 +1275,7 @@ fn settings_layout(
                     for (tab, title) in [
                         (SettingsTab::Images, "图片显示"),
                         (SettingsTab::Share, "分享软件"),
+                        (SettingsTab::About, "关于与反馈"),
                     ] {
                         if ui
                             .add_sized(
@@ -1876,6 +1879,17 @@ impl VaultApp {
             .vscroll(false)
             .show(ctx, |ui| {
                 self.settings_tab = settings_layout(ui, self.settings_tab, |ui, tab| {
+                    if tab == SettingsTab::About {
+                        ui.heading("关于星匣 StarVault");
+                        ui.label(format!("版本 {}", env!("CARGO_PKG_VERSION")));
+                        ui.label("你的 AI 记忆，始终属于你。");
+                        ui.add_space(12.0);
+                        ui.hyperlink_to("GitHub 仓库", share::PROJECT);
+                        ui.hyperlink_to("反馈问题", format!("{}/issues/new", share::PROJECT));
+                        ui.add_space(8.0);
+                        ui.label(RichText::new("将在浏览器打开 GitHub。反馈内容公开，请勿上传私人对话、附件或凭据。").small().color(MUTED));
+                        return;
+                    }
                     if tab == SettingsTab::Share {
                         if let Some(image) = self.share.show(ui) {
                             self.preview_image = Some(image);
@@ -2789,16 +2803,6 @@ fn filter_combo(
     value: &mut String,
     options: BTreeSet<String>,
 ) -> bool {
-    filter_combo_display(ui, label, value, options, None)
-}
-
-fn filter_combo_display(
-    ui: &mut egui::Ui,
-    label: &str,
-    value: &mut String,
-    options: BTreeSet<String>,
-    display: Option<fn(&str) -> String>,
-) -> bool {
     ui.label(RichText::new(label).small().color(MUTED));
     let mut changed = false;
     egui::ComboBox::from_id_salt(label)
@@ -2807,16 +2811,12 @@ fn filter_combo_display(
         .selected_text(if value.is_empty() {
             "全部".to_owned()
         } else {
-            display
-                .map(|f| f(value.as_str()))
-                .unwrap_or_else(|| value.clone())
+            value.clone()
         })
         .show_ui(ui, |ui| {
             changed |= ui.selectable_value(value, String::new(), "全部").changed();
-            for option in options {
-                let text = display
-                    .map(|f| f(&option))
-                    .unwrap_or_else(|| option.clone());
+            for option in options.into_iter().filter(|option| !option.is_empty()) {
+                let text = option.clone();
                 changed |= ui.selectable_value(value, option, text).changed();
             }
         })
@@ -2910,6 +2910,7 @@ impl eframe::App for VaultApp {
                             widget.bg_fill = Color32::from_rgb(36, 52, 81);
                             widget.weak_bg_fill = widget.bg_fill;
                         }
+                        brand::github_link(ui);
                         ui.menu_button("管理", |ui| {
                             *ui.visuals_mut() = light;
                             ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::NONE;
@@ -2933,6 +2934,11 @@ impl eframe::App for VaultApp {
                             }
                             if ui.button("分享软件").clicked() {
                                 self.settings_tab = SettingsTab::Share;
+                                self.show_settings = true;
+                                ui.close_menu();
+                            }
+                            if ui.button("关于与反馈").clicked() {
+                                self.settings_tab = SettingsTab::About;
                                 self.show_settings = true;
                                 ui.close_menu();
                             }
@@ -3016,10 +3022,13 @@ impl eframe::App for VaultApp {
                     });
                 });
             });
+        if filters_view::show(ctx, &mut self.filters, &self.catalog) {
+            self.apply_filters(ctx);
+        }
         let mut clicked = None;
         egui::SidePanel::left("list")
-            .default_width(300.0)
-            .width_range(260.0..=(ctx.screen_rect().width() - 620.0).clamp(260.0, 380.0))
+            .default_width(280.0)
+            .width_range(220.0..=(ctx.available_rect().width() - 500.0).clamp(220.0, 380.0))
             .frame(egui::Frame::new().fill(PAPER).inner_margin(14))
             .show(ctx, |ui| {
                 egui::TopBottomPanel::bottom("archive-shortcuts")
@@ -3062,7 +3071,7 @@ impl eframe::App for VaultApp {
                         );
                     });
                 });
-                let mut changed = ui
+                let changed = ui
                     .add(
                         egui::TextEdit::singleline(&mut self.filters.query)
                             .id(egui::Id::new("archive-search"))
@@ -3094,136 +3103,6 @@ impl eframe::App for VaultApp {
                     if view_changed {
                         self.save_preferences();
                     }
-                    let active = [
-                        &self.filters.tool,
-                        &self.filters.device,
-                        &self.filters.project,
-                        &self.filters.model,
-                        &self.filters.source,
-                        &self.filters.label,
-                    ]
-                    .iter()
-                    .filter(|value| !value.is_empty())
-                    .count()
-                        + usize::from(self.filters.days > 0);
-                    let label = if active == 0 {
-                        "筛选".into()
-                    } else {
-                        format!("筛选 · {active}")
-                    };
-                    ui.menu_button(label, |ui| {
-                        ui.set_width(250.0);
-                        egui::ScrollArea::vertical()
-                            .id_salt("filters-scroll")
-                            .max_height(420.0)
-                            .show(ui, |ui| {
-                                changed |= filter_combo_display(
-                                    ui,
-                                    "对话来源",
-                                    &mut self.filters.tool,
-                                    self.catalog
-                                        .sessions
-                                        .iter()
-                                        .map(|s| s.meta.tool.clone())
-                                        .collect(),
-                                    Some(tool_name),
-                                );
-                                changed |= filter_combo(
-                                    ui,
-                                    "电脑",
-                                    &mut self.filters.device,
-                                    self.catalog
-                                        .sessions
-                                        .iter()
-                                        .map(|s| s.device.clone())
-                                        .collect(),
-                                );
-                                changed |= filter_combo(
-                                    ui,
-                                    "项目",
-                                    &mut self.filters.project,
-                                    self.catalog
-                                        .sessions
-                                        .iter()
-                                        .map(|s| s.meta.project.clone())
-                                        .collect(),
-                                );
-                                let extra_active = !self.filters.model.is_empty()
-                                    || !self.filters.source.is_empty()
-                                    || !self.filters.label.is_empty();
-                                egui::CollapsingHeader::new(if extra_active {
-                                    "更多筛选 · 已启用"
-                                } else {
-                                    "更多筛选"
-                                })
-                                .default_open(extra_active)
-                                .show(ui, |ui| {
-                                    changed |= filter_combo(
-                                        ui,
-                                        "模型",
-                                        &mut self.filters.model,
-                                        self.catalog
-                                            .sessions
-                                            .iter()
-                                            .flat_map(|s| s.meta.models.clone())
-                                            .collect(),
-                                    );
-                                    changed |= filter_combo(
-                                        ui,
-                                        "会话类型",
-                                        &mut self.filters.source,
-                                        self.catalog
-                                            .sessions
-                                            .iter()
-                                            .map(|s| s.meta.source.clone())
-                                            .collect(),
-                                    );
-                                    changed |= filter_combo(
-                                        ui,
-                                        "原始标签",
-                                        &mut self.filters.label,
-                                        self.catalog
-                                            .sessions
-                                            .iter()
-                                            .flat_map(|s| s.meta.labels.clone())
-                                            .collect(),
-                                    );
-                                });
-                                ui.label(RichText::new("更新时间").small().color(MUTED));
-                                egui::ComboBox::from_id_salt("days")
-                                    .width(ui.available_width())
-                                    .selected_text(if self.filters.days == 0 {
-                                        "全部时间".into()
-                                    } else {
-                                        format!("最近 {} 天", self.filters.days)
-                                    })
-                                    .show_ui(ui, |ui| {
-                                        for (days, label) in [
-                                            (0, "全部时间"),
-                                            (1, "最近 24 小时"),
-                                            (7, "最近 7 天"),
-                                            (30, "最近 30 天"),
-                                        ] {
-                                            changed |= ui
-                                                .selectable_value(
-                                                    &mut self.filters.days,
-                                                    days,
-                                                    label,
-                                                )
-                                                .changed();
-                                        }
-                                    });
-                                ui.add_space(12.0);
-                                if ui.button("清除筛选").clicked() {
-                                    self.filters = Filters {
-                                        query: self.filters.query.clone(),
-                                        archived: self.filters.archived,
-                                        ..Default::default()
-                                    };
-                                    changed = true;
-                                }
-                            });
-                    });
                 });
                 if changed {
                     self.apply_filters(ctx);

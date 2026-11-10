@@ -5,7 +5,7 @@ description: 开发和维护星匣 StarVault（原 Chat History Vault）的本�
 
 # 星匣 · StarVault
 
-产品标语为“你的 AI 记忆，始终属于你。”。展示名称使用星匣 / StarVault；命令、模块、MCP 服务、Skill 标识、数据路径与仓库地址继续沿用 `chat-history-vault` 等既有名称，保持安装与备份兼容。
+产品标语为“你的 AI 记忆，始终属于你。”。展示名称使用星匣 / StarVault；命令、模块、MCP 服务、Skill 标识与数据路径兼容 `chat-history-vault` 等既有名称。软件开发、界面修改、预览和打包均在 `cpython666/starvault` 的检出目录进行；`cpython666/chat-history-vault` 仅用于私有聊天备份，不作为软件开发入口。
 
 维护一个以原始对话为核心的本地档案工具：Git 管理文字，附件集中保存在本地；桌面端负责检索、阅读和可选迁移。先看仓库 [README](../../../README.md) 和当前改动，延续已有实现。以下是产品约定，不代表额外的外部操作授权。
 
@@ -24,6 +24,7 @@ description: 开发和维护星匣 StarVault（原 Chat History Vault）的本�
 | `chat_history_vault.py`、`pyproject.toml`、`setup.cfg` | 统一 CLI、Python 模块入口、安装与 Skill 分发 |
 | `skills/use-chat-history-vault/SKILL.md` | 随软件分发、面向使用者的 Skill，与本开发 Skill 分工 |
 | `desktop/src/main.rs` | 原生 egui 阅读器、筛选、消息卡片、图片加载与预览、迁移面板 |
+| `desktop/src/filters_view.rs` | 常驻独立筛选栏、来源与时间快捷选择、条件移除、三栏布局交互回归 |
 | `desktop/build_macos.py` | release 构建、macOS `.app` 组装与本机临时签名 |
 | `test_vault.py`、Rust `tests` 模块 | 数据完整性、过滤、图片路径、原文保留、交互回归 |
 
@@ -67,7 +68,7 @@ MCP 的 `backup_conversations tool=all` 与 CLI 共用 `enabled_tools`，不能�
 
 ## 阅读器与界面约定
 
-- 使用会话导航与正文双栏布局：搜索常驻会话栏顶部，来源、电脑、项目及其他条件收进“筛选”菜单，收起后显示已启用条件数。保留项目分组及未归档 / 已归档 / 全部切换，备份文件夹入口固定在会话栏底部。
+- 使用“筛选 / 项目或会话列表 / 时间线或正文”三栏布局：最左侧筛选栏常驻，来源和时间直接点选，电脑、项目、模型、会话类型与原始标签下拉框持续可见，不再收进菜单。筛选栏内显示启用数量和可移除的条件，顶部“清除”保留文字搜索与归档标签页。搜索常驻中间会话栏顶部，保留项目分组及未归档 / 已归档 / 全部切换，备份文件夹入口固定在会话栏底部。筛选栏、列表分别调整宽度和滚动，列表按剩余空间限宽。
 - 紧凑品牌栏使用深星蓝与金色矢量星匣标记，阅读区保持浅色，列表选中项使用靛蓝。顶部保留“刷新”“导入 ChatGPT”“管理”；附件与迁移、Skill 备份与恢复、设置（图片显示 / 分享软件）、选择备份目录集中在“管理”菜单，阅读栏“更多”提供定位会话文件与会话信息。
 - 设置使用左侧纵向分类、右侧内容；分类固定可见，右侧长内容独立滚动，切换分类保留各自草稿与滚动位置。
 - 正文居中限宽，用户消息使用淡色气泡，助手回复不加整块背景；保留文字角色与时间，颜色不能成为唯一识别方式。文字、边框与留白统一，长标题和窄窗口不应挤掉正文。
@@ -81,6 +82,8 @@ MCP 的 `backup_conversations tool=all` 与 CLI 共用 `enabled_tools`，不能�
 
 ## 验证与交付
 
+2026-11-10：`desktop/src/brand.rs::github_link` 提供主窗右上角 32×32 原生 GitHub 图标，复用 `share::PROJECT` 的公开源码仓库；`管理 → 关于与反馈` 与设置同名分类提供仓库 / Issue 文字链接和隐私提示，不打开用户私有备份仓库。图标为本地矢量绘制，支持悬停、焦点和键盘 Enter，经 egui 系统浏览器命令打开；不新增依赖、联网统计或 Star 请求。`settings_view_tests.rs` 覆盖点击、键盘命令与设置布局；release 测试、构建及隔离空归档的原生自身截图通过，证据在忽略的 `.local/github-entry/`。未读取正式会话、安装、提交、推送或发布，未实测 Windows / Linux 浏览器。
+
 在仓库根目录按改动范围运行：
 
 ```sh
@@ -89,11 +92,13 @@ cargo test --release --locked --manifest-path desktop/Cargo.toml
 python3 desktop/build_macos.py --output /path/to/output
 ```
 
+软件仓库根目录的 `package.json` 提供 `npm run preview` 和 `npm run preview:timeline`，直接调用 Cargo 编译并启动阅读器，后者加 `--timeline` 进入时间线；无需安装 npm 依赖。预览只读取已配置的归档，不执行源会话导出或同步。
+
 数据变更关注增量重复运行、归档保留、文字与附件分离及异常阻止上传；界面变更检查真实长对话、代码、表格、竖长图和窄窗口。图片交互检查缩略尺寸及点击确实打开原图。
 
 来源相关回归见 `test_agent_sources.py`、`test_claude_desktop.py`、`test_resource_sources.py`：在临时目录验证 WAL 更新、坏记录保护、压缩多帧/截断、来源与账号隔离、迁移后日志定位及重复零复制。平台默认路径模拟测试不等于 Windows/Linux 原生系统验证。
 
-阅读器支持 `--archive`、`--select <会话ID>`、`--source`、`--projects`、`--archived`、`--check`。可用 `--screenshot /absolute/path.png` 截取应用自身画面，结合 `--preview-image` 可检查所选会话的第一张图片预览；不必截取用户整个桌面。测试临时归档放在独立目录，不能混入真实数据分支。
+阅读器支持 `--archive`、`--select <会话ID>`、`--source`、`--projects`、`--timeline`、`--archived`、`--check`。可用 `--screenshot /absolute/path.png` 截取应用自身画面，结合 `--preview-image` 可检查所选会话的第一张图片预览；不必截取用户整个桌面。测试临时归档放在独立目录，不能混入真实数据分支。`filters_view` 的交互回归覆盖来源直接选择、清除保留搜索与归档条件，以及 980 / 1320 像素窗口下的三栏位置与正文空间。
 
 打包前检查磁盘空间。空间不足时保留可用旧版和源码，不删除聊天备份或无关文件。完成后可删除本次生成的 `desktop/target` 缓存；避免为一次发布同时累积 debug 与 release 两套输出。
 

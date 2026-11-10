@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "scripts": {
+    "preview": "cargo run --release --locked --manifest-path desktop/Cargo.toml --",
+    "preview:timeline": "cargo run --release --locked --manifest-path desktop/Cargo.toml -- --timeline"
+  }
+}

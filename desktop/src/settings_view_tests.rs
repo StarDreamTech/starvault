@@ -1,5 +1,105 @@
 use super::*;
 
+#[test]
+fn github_icon_supports_keyboard_activation() {
+    let ctx = egui::Context::default();
+    for frame in 0..2 {
+        let output = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(400.0, 100.0),
+                )),
+                events: if frame == 0 {
+                    vec![]
+                } else {
+                    vec![egui::Event::Key {
+                        key: egui::Key::Enter,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::NONE,
+                    }]
+                },
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let response = brand::github_link(ui);
+                    if frame == 0 {
+                        response.request_focus();
+                    }
+                });
+            },
+        );
+        if frame == 1 {
+            assert!(output
+                .platform_output
+                .commands
+                .iter()
+                .any(|command| matches!(command,
+                    egui::OutputCommand::OpenUrl(url) if url.url == share::PROJECT
+                )));
+        }
+    }
+}
+
+#[test]
+fn github_icon_opens_only_the_public_source_repository() {
+    let ctx = egui::Context::default();
+    let mut position = egui::Pos2::ZERO;
+    for frame in 0..3 {
+        let output = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(400.0, 100.0),
+                )),
+                events: if frame == 0 {
+                    vec![]
+                } else {
+                    vec![
+                        egui::Event::PointerMoved(position),
+                        egui::Event::PointerButton {
+                            pos: position,
+                            button: egui::PointerButton::Primary,
+                            pressed: frame == 1,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ]
+                },
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let response = brand::github_link(ui);
+                    position = response.rect.center();
+                    assert!(response.rect.width() >= 32.0);
+                });
+            },
+        );
+        let urls: Vec<_> = output
+            .platform_output
+            .commands
+            .iter()
+            .filter_map(|command| {
+                if let egui::OutputCommand::OpenUrl(url) = command {
+                    Some(url)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if frame == 2 {
+            assert_eq!(urls.len(), 1);
+            assert_eq!(urls[0].url, "https://github.com/cpython666/starvault");
+            assert!(urls[0].new_tab);
+        } else {
+            assert!(urls.is_empty());
+        }
+    }
+}
+
 fn labels(output: &egui::FullOutput) -> Vec<(String, egui::Rect)> {
     fn visit(shape: &egui::Shape, result: &mut Vec<(String, egui::Rect)>) {
         match shape {
