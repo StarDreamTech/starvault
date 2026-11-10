@@ -18,6 +18,7 @@ use std::{
 mod attachments_view;
 mod brand;
 mod filters_view;
+mod message_metadata;
 #[cfg(test)]
 mod replies_view_tests;
 #[cfg(test)]
@@ -27,14 +28,14 @@ mod timeline;
 #[cfg(test)]
 mod timeline_view_tests;
 
-const ACCENT: Color32 = Color32::from_rgb(83, 96, 191);
+const ACCENT: Color32 = Color32::from_rgb(81, 94, 150);
 const NAVY: Color32 = Color32::from_rgb(22, 32, 55);
-const INK: Color32 = Color32::from_rgb(37, 47, 67);
-const MUTED: Color32 = Color32::from_rgb(104, 117, 139);
-const PAPER: Color32 = Color32::from_rgb(246, 248, 253);
-const LINE: Color32 = Color32::from_rgb(225, 230, 240);
-const SELECTED: Color32 = Color32::from_rgb(232, 236, 254);
-const HOVER: Color32 = Color32::from_rgb(241, 244, 254);
+const INK: Color32 = Color32::from_rgb(42, 44, 49);
+const MUTED: Color32 = Color32::from_rgb(119, 123, 132);
+const PAPER: Color32 = Color32::from_rgb(247, 247, 248);
+const LINE: Color32 = Color32::from_rgb(230, 231, 235);
+const SELECTED: Color32 = Color32::from_rgb(234, 237, 244);
+const HOVER: Color32 = Color32::from_rgb(240, 241, 244);
 const SESSION_ROW_HEIGHT: f32 = 50.0;
 static IMAGE_LINK: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"!\[([^\]]*)\]\(([^)\n]+)\)").unwrap());
@@ -405,11 +406,14 @@ fn body(markdown: &str) -> &str {
 
 struct MessageCard {
     role: &'static str,
+    sender: String,
     timestamp: String,
+    original: String,
     markdown: String,
     size: egui::Vec2,
     images: Vec<PreviewImage>,
     context: Option<&'static str>,
+    context_image_count: usize,
     attachment_context: String,
     replies_expanded: bool,
 }
@@ -571,7 +575,7 @@ fn context_fields(markdown: &str) -> Vec<(&'static str, String)> {
 }
 
 fn show_context(ui: &mut egui::Ui, card: &MessageCard) {
-    let fields = context_fields(&card.markdown);
+    let fields = context_fields(&card.original);
     if fields.is_empty() {
         ui.label(
             RichText::new("会话附带的说明与上下文，可按需查看原文。")
@@ -589,21 +593,14 @@ fn show_context(ui: &mut egui::Ui, card: &MessageCard) {
             });
         }
     }
-    egui::CollapsingHeader::new("查看原文")
-        .id_salt("context-original")
+    if ui.small_button("复制原文").clicked() {
+        ui.ctx().copy_text(card.original.clone());
+    }
+    egui::ScrollArea::vertical()
+        .id_salt("context-original-scroll")
+        .max_height(260.0)
         .show(ui, |ui| {
-            if ui.button("复制原文").clicked() {
-                ui.ctx().copy_text(card.markdown.clone());
-            }
-            egui::ScrollArea::vertical()
-                .id_salt("context-original-scroll")
-                .max_height(240.0)
-                .show(ui, |ui| {
-                    ui.add(
-                        egui::Label::new(RichText::new(&card.markdown).monospace().size(12.0))
-                            .wrap(),
-                    );
-                });
+            ui.add(egui::Label::new(RichText::new(&card.original).monospace().size(12.0)).wrap());
         });
 }
 
@@ -682,11 +679,14 @@ fn message_cards(markdown: &str) -> Vec<MessageCard> {
         if let Some((role, date)) = heading {
             cards.push(MessageCard {
                 role,
+                sender: if role == "用户" { "你" } else { "助手" }.into(),
                 timestamp: date.to_owned(),
+                original: String::new(),
                 markdown: String::new(),
                 size: egui::vec2(0.0, 140.0),
                 images: Vec::new(),
                 context: None,
+                context_image_count: 0,
                 attachment_context: String::new(),
                 replies_expanded: false,
             });
@@ -708,11 +708,14 @@ fn message_cards(markdown: &str) -> Vec<MessageCard> {
         if cards.is_empty() {
             cards.push(MessageCard {
                 role: "原文 / 附件",
+                sender: "附件".into(),
                 timestamp: String::new(),
+                original: String::new(),
                 markdown: String::new(),
                 size: egui::vec2(0.0, 140.0),
                 images: Vec::new(),
                 context: None,
+                context_image_count: 0,
                 attachment_context: String::new(),
                 replies_expanded: false,
             });
@@ -721,9 +724,14 @@ fn message_cards(markdown: &str) -> Vec<MessageCard> {
     }
     cards.retain(|c| !c.markdown.trim().is_empty() || !c.timestamp.is_empty());
     for card in &mut cards {
+        card.original = card.markdown.clone();
         if card.role == "用户" {
             card.context = context_only(&card.markdown);
             (card.markdown, card.attachment_context) = separate_attachment_context(&card.markdown);
+            if let Some(request) = message_metadata::human_request(&card.markdown) {
+                card.attachment_context = card.original.clone();
+                card.markdown = request;
+            }
         }
     }
     cards
@@ -769,15 +777,15 @@ fn show_message_cards(
         .auto_shrink([false, false])
         .show_viewport(ui, |ui, viewport| {
             let available = ui.available_width();
-            let width = available.clamp(100.0, 820.0);
+            let width = (available - 24.0).clamp(100.0, 760.0);
             let top = ui.cursor().top();
             ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 ui.add_space(((available - width) * 0.5).max(0.0));
                 ui.vertical(|ui| {
                     ui.set_width(width);
-                    ui.spacing_mut().item_spacing.y = 20.0;
-                    ui.add_space(16.0);
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    ui.add_space(20.0);
                     let mut hidden_until = 0;
                     for (index, card) in cards.iter_mut().enumerate() {
                         if let Some(&(latest, count)) = reply_groups.get(&index) {
@@ -786,36 +794,22 @@ fn show_message_cards(
                                 card.replies_expanded = true;
                             }
                             let label = if card.replies_expanded {
-                                format!("   收起过程回复 · {count} 条")
+                                format!("收起过程回复 · {count} 条")
                             } else {
-                                format!("   展开过程回复 · {count} 条")
+                                format!("展开过程回复 · {count} 条")
                             };
                             if ui
                                 .push_id(("reply-group", index), |ui| {
-                                    let response = ui
-                                        .add(
-                                            egui::Button::new(
-                                                RichText::new(label).size(12.0).color(MUTED),
-                                            )
-                                            .frame(false),
+                                    ui.add(
+                                        egui::Button::new(
+                                            RichText::new(label).size(12.0).color(MUTED),
                                         )
-                                        .on_hover_text(
-                                            "本轮最后一条回复保持展示，展开可查看较早的回复。",
-                                        );
-                                    let mut icon = response.clone();
-                                    icon.rect = egui::Rect::from_center_size(
-                                        egui::pos2(
-                                            response.rect.left() + 7.0,
-                                            response.rect.center().y,
-                                        ),
-                                        egui::vec2(8.0, 8.0),
-                                    );
-                                    egui::collapsing_header::paint_default_icon(
-                                        ui,
-                                        if card.replies_expanded { 1.0 } else { 0.0 },
-                                        &icon,
-                                    );
-                                    response.clicked()
+                                        .frame(false),
+                                    )
+                                    .on_hover_text(
+                                        "本轮最后一条回复保持展示，展开可查看较早的回复。",
+                                    )
+                                    .clicked()
                                 })
                                 .inner
                             {
@@ -834,191 +828,183 @@ fn show_message_cards(
                         } else {
                             140.0
                         };
-                        // Keep offscreen messages out of the Markdown/image renderer.
                         if *scroll_target != Some(index)
                             && (y + height < viewport.min.y - 200.0 || y > viewport.max.y + 200.0)
                         {
                             ui.allocate_space(egui::vec2(width, height));
                             continue;
                         }
-                        let user_message = card.role == "用户" && card.context.is_none();
-                        let inset = if user_message {
-                            (width * 0.08).min(48.0)
-                        } else {
-                            0.0
-                        };
-                        let message_width = width - inset;
-                        let (fill, border, accent) = match if card.context.is_some() {
-                            "context"
-                        } else {
-                            card.role
-                        } {
-                            "用户" => (
-                                Color32::from_rgb(240, 242, 250),
-                                LINE,
-                                Color32::from_rgb(43, 91, 157),
-                            ),
-                            "助手" => {
-                                (Color32::TRANSPARENT, LINE, Color32::from_rgb(35, 118, 99))
-                            }
-                            _ => (Color32::from_rgb(243, 245, 250), LINE, MUTED),
-                        };
                         let response = ui
                             .push_id(index, |ui| {
-                                ui.horizontal_top(|ui| {
-                                    ui.spacing_mut().item_spacing.x = 0.0;
-                                    ui.add_space(inset);
-                                    ui.vertical(|ui| {
+                                ui.vertical(|ui| {
+                                    if card.context.is_some() {
+                                        ui.add_space(4.0);
                                         egui::Frame::new()
-                                            .fill(fill)
-                                            .stroke(if focus_message == Some(index) {
-                                                egui::Stroke::new(1.5, ACCENT)
-                                            } else {
-                                                egui::Stroke::NONE
-                                            })
-                                            .corner_radius(12)
-                                            .inner_margin(if card.context.is_some() {
-                                                8
-                                            } else {
-                                                16
-                                            })
+                                            .fill(PAPER)
+                                            .corner_radius(7)
+                                            .inner_margin(egui::Margin::symmetric(10, 3))
                                             .show(ui, |ui| {
-                                                ui.set_width(
-                                                    (message_width
-                                                        - if card.context.is_some() {
-                                                            16.0
-                                                        } else {
-                                                            32.0
-                                                        })
-                                                    .max(66.0),
+                                                ui.set_width(width - 20.0);
+                                                ui.spacing_mut().item_spacing.y = 8.0;
+                                                let time = short_date(&card.timestamp);
+                                                let label = format!(
+                                                    "{}{}{}",
+                                                    message_metadata::title(card),
+                                                    if card.context_image_count == 0 {
+                                                        String::new()
+                                                    } else {
+                                                        format!(
+                                                            "  ·  {} 张关联图片",
+                                                            card.context_image_count
+                                                        )
+                                                    },
+                                                    if time.is_empty() {
+                                                        String::new()
+                                                    } else {
+                                                        format!("  ·  {time}")
+                                                    }
                                                 );
-                                                ui.spacing_mut().item_spacing =
-                                                    egui::vec2(8.0, 12.0);
-                                                if let Some(label) = card.context {
-                                                    egui::CollapsingHeader::new(
-                                                        RichText::new(format!(
-                                                            "{label}  ·  原文保留"
+                                                egui::CollapsingHeader::new(
+                                                    RichText::new(label).size(12.0).color(MUTED),
+                                                )
+                                                .id_salt("auxiliary-content")
+                                                .default_open(focus_message == Some(index))
+                                                .show(ui, |ui| {
+                                                    show_context(ui, card);
+                                                    if card.context_image_count > 0 {
+                                                        egui::CollapsingHeader::new(format!(
+                                                            "关联图片 · {} 张",
+                                                            card.context_image_count
                                                         ))
-                                                        .size(12.0)
-                                                        .color(MUTED),
-                                                    )
-                                                    .id_salt("auxiliary-content")
-                                                    .show(ui, |ui| {
-                                                        show_context(ui, card);
-                                                    });
-                                                    return;
-                                                }
-                                                ui.horizontal(|ui| {
-                                                    ui.label(
-                                                        RichText::new(card.role)
-                                                            .strong()
-                                                            .size(13.0)
-                                                            .color(accent),
-                                                    );
-                                                    let time = DateTime::parse_from_rfc3339(
-                                                        &card.timestamp,
-                                                    )
-                                                    .map(|d| {
-                                                        d.with_timezone(&Local)
-                                                            .format("%Y-%m-%d %H:%M")
-                                                            .to_string()
-                                                    })
-                                                    .unwrap_or_else(|_| card.timestamp.clone());
-                                                    ui.label(
-                                                        RichText::new(time).size(12.0).color(MUTED),
-                                                    )
-                                                    .on_hover_text(&card.timestamp);
+                                                        .id_salt("context-images")
+                                                        .show(ui, |ui| {
+                                                            egui::ScrollArea::vertical()
+                                                                .max_height(360.0)
+                                                                .id_salt("context-images-scroll")
+                                                                .show(ui, |ui| {
+                                                                    show_message_body(
+                                                                        ui,
+                                                                        card,
+                                                                        cache,
+                                                                        thumbnail_width,
+                                                                        &clicked,
+                                                                    )
+                                                                });
+                                                        });
+                                                    }
                                                 });
-                                                let pictures = card.images.clone();
-                                                let clicked = Rc::clone(&clicked);
-                                                if !card.attachment_context.is_empty() {
-                                                    egui::CollapsingHeader::new(
-                                                        RichText::new("附件来源 · 路径与原始信息")
-                                                            .size(12.0)
-                                                            .color(MUTED),
-                                                    )
-                                                    .id_salt("attachment-context")
-                                                    .show(ui, |ui| {
-                                                        ui.add(
-                                                            egui::Label::new(
-                                                                RichText::new(
-                                                                    &card.attachment_context,
+                                            });
+                                        return;
+                                    }
+                                    ui.add_space(26.0);
+                                    let user_message = card.role == "用户";
+                                    let message_width = if user_message {
+                                        (width * 0.86).min(640.0)
+                                    } else {
+                                        width
+                                    };
+                                    ui.horizontal_top(|ui| {
+                                        ui.spacing_mut().item_spacing.x = 0.0;
+                                        ui.add_space(width - message_width);
+                                        ui.vertical(|ui| {
+                                            ui.set_width(message_width);
+                                            ui.spacing_mut().item_spacing = egui::vec2(8.0, 7.0);
+                                            ui.horizontal(|ui| {
+                                                ui.label(
+                                                    RichText::new(&card.sender)
+                                                        .size(12.0)
+                                                        .strong()
+                                                        .color(INK),
+                                                );
+                                                ui.label(
+                                                    RichText::new(short_date(&card.timestamp))
+                                                        .size(11.0)
+                                                        .color(MUTED),
+                                                )
+                                                .on_hover_text(&card.timestamp);
+                                                ui.with_layout(
+                                                    egui::Layout::right_to_left(
+                                                        egui::Align::Center,
+                                                    ),
+                                                    |ui| {
+                                                        if ui
+                                                            .add(
+                                                                egui::Button::new(
+                                                                    RichText::new("复制")
+                                                                        .size(11.0)
+                                                                        .color(MUTED),
                                                                 )
                                                                 .small()
-                                                                .color(MUTED),
+                                                                .frame(false),
                                                             )
-                                                            .wrap(),
-                                                        );
-                                                    });
-                                                }
-                                                CommonMarkViewer::new()
-                                                    .render_html_fn(Some(&move |ui, html| {
-                                                        let image = html
-                                                            .trim()
-                                                            .strip_prefix("<vault-thumbnail-")
-                                                            .and_then(|s| s.strip_suffix('>'))
-                                                            .and_then(|s| s.parse::<usize>().ok())
-                                                            .and_then(|i| pictures.get(i));
-                                                        if let Some(image) = image {
-                                                            let max_width =
-                                                                (thumbnail_width as f32).min(
-                                                                    (message_width - 48.0)
-                                                                        .max(48.0),
-                                                                );
-                                                            egui::Frame::new()
-                                                                .fill(Color32::from_white_alpha(
-                                                                    210,
-                                                                ))
-                                                                .stroke(egui::Stroke::new(
-                                                                    1.0, border,
-                                                                ))
-                                                                .corner_radius(10)
-                                                                .inner_margin(7)
-                                                                .show(ui, |ui| {
-                                                                    ui.vertical(|ui| {
-                                                                        let response = ui
-                                                            .add(
-                                                                egui::Image::new(&image.uri)
-                                                                    .fit_to_original_size(1.0)
-                                                                    .max_size(egui::vec2(
-                                                                        max_width,
-                                                                        thumbnail_width as f32
-                                                                            * 0.75,
-                                                                    ))
-                                                                    .corner_radius(6)
-                                                                    .alt_text(&image.alt)
-                                                                    .sense(egui::Sense::click()),
-                                                            )
-                                                            .on_hover_cursor(
-                                                                egui::CursorIcon::ZoomIn,
-                                                            )
-                                                            .on_hover_text("点击查看大图");
-                                                                        if response.clicked() {
-                                                                            clicked.replace(Some(
-                                                                                image.clone(),
-                                                                            ));
-                                                                        }
-                                                                        ui.label(
-                                                                            RichText::new(
-                                                                                "点击放大",
-                                                                            )
-                                                                            .size(11.0)
-                                                                            .color(accent),
-                                                                        );
-                                                                    });
-                                                                });
-                                                        } else {
-                                                            // Other HTML remains visible as text, just like the archive.
-                                                            ui.label(html);
+                                                            .on_hover_text("复制这条消息的完整原文")
+                                                            .clicked()
+                                                        {
+                                                            ui.ctx()
+                                                                .copy_text(card.original.clone());
                                                         }
-                                                    }))
-                                                    .show(ui, cache, &card.markdown);
-                                            })
-                                            .response
-                                    })
-                                    .inner
+                                                    },
+                                                );
+                                            });
+                                            egui::Frame::new()
+                                                .fill(if user_message {
+                                                    Color32::from_rgb(243, 243, 245)
+                                                } else {
+                                                    Color32::TRANSPARENT
+                                                })
+                                                .stroke(if focus_message == Some(index) {
+                                                    egui::Stroke::new(1.5, ACCENT)
+                                                } else {
+                                                    egui::Stroke::NONE
+                                                })
+                                                .corner_radius(if user_message { 14 } else { 6 })
+                                                .inner_margin(if user_message { 16 } else { 0 })
+                                                .show(ui, |ui| {
+                                                    ui.set_width(
+                                                        (message_width
+                                                            - if user_message {
+                                                                32.0
+                                                            } else {
+                                                                0.0
+                                                            })
+                                                        .max(66.0),
+                                                    );
+                                                    show_message_body(
+                                                        ui,
+                                                        card,
+                                                        cache,
+                                                        thumbnail_width,
+                                                        &clicked,
+                                                    );
+                                                });
+                                            if !card.attachment_context.is_empty() {
+                                                egui::CollapsingHeader::new(
+                                                    RichText::new("消息来源 · 原始信息")
+                                                        .size(11.0)
+                                                        .color(MUTED),
+                                                )
+                                                .id_salt("attachment-context")
+                                                .show(ui, |ui| {
+                                                    egui::ScrollArea::vertical()
+                                                        .max_height(220.0)
+                                                        .show(ui, |ui| {
+                                                            ui.add(
+                                                                egui::Label::new(
+                                                                    RichText::new(
+                                                                        &card.attachment_context,
+                                                                    )
+                                                                    .monospace()
+                                                                    .size(12.0),
+                                                                )
+                                                                .wrap(),
+                                                            );
+                                                        });
+                                                });
+                                            }
+                                        });
+                                    });
                                 })
-                                .inner
+                                .response
                             })
                             .inner;
                         card.size = egui::vec2(width, response.rect.height());
@@ -1031,11 +1017,61 @@ fn show_message_cards(
                             }
                         }
                     }
+                    ui.add_space(32.0);
                 });
             });
         });
     let selected = clicked.borrow_mut().take();
     selected
+}
+
+fn show_message_body(
+    ui: &mut egui::Ui,
+    card: &MessageCard,
+    cache: &mut CommonMarkCache,
+    thumbnail_width: u32,
+    clicked: &Rc<RefCell<Option<PreviewImage>>>,
+) {
+    let max_width = (thumbnail_width as f32).min((ui.available_width() - 16.0).max(48.0));
+    ui.visuals_mut().extreme_bg_color = PAPER;
+    ui.visuals_mut().widgets.noninteractive.corner_radius = egui::CornerRadius::same(8);
+    let pictures = card.images.clone();
+    let clicked = Rc::clone(clicked);
+    CommonMarkViewer::new()
+        .render_html_fn(Some(&move |ui, html| {
+            let image = html
+                .trim()
+                .strip_prefix("<vault-thumbnail-")
+                .and_then(|s| s.strip_suffix('>'))
+                .and_then(|s| s.parse::<usize>().ok())
+                .and_then(|i| pictures.get(i));
+            if let Some(image) = image {
+                egui::Frame::new()
+                    .fill(Color32::WHITE)
+                    .stroke(egui::Stroke::new(1.0, LINE))
+                    .corner_radius(10)
+                    .inner_margin(7)
+                    .show(ui, |ui| {
+                        let response = ui
+                            .add(
+                                egui::Image::new(&image.uri)
+                                    .fit_to_original_size(1.0)
+                                    .max_size(egui::vec2(max_width, thumbnail_width as f32 * 0.75))
+                                    .corner_radius(6)
+                                    .alt_text(&image.alt)
+                                    .sense(egui::Sense::click()),
+                            )
+                            .on_hover_cursor(egui::CursorIcon::ZoomIn)
+                            .on_hover_text("点击查看大图");
+                        if response.clicked() {
+                            clicked.replace(Some(image.clone()));
+                        }
+                    });
+            } else {
+                ui.label(html);
+            }
+        }))
+        .show(ui, cache, &card.markdown);
 }
 
 fn short_date(date: &str) -> String {
@@ -1230,8 +1266,8 @@ fn setup(ctx: &egui::Context, font_size: f32) {
     style.visuals.widgets.active.bg_fill = SELECTED;
     style.visuals.widgets.active.weak_bg_fill = SELECTED;
     style.spacing.item_spacing = egui::vec2(8.0, 8.0);
-    style.spacing.button_padding = egui::vec2(11.0, 7.0);
-    style.spacing.interact_size.y = 32.0;
+    style.spacing.button_padding = egui::vec2(9.0, 5.0);
+    style.spacing.interact_size.y = 28.0;
     style
         .text_styles
         .insert(egui::TextStyle::Body, egui::FontId::proportional(font_size));
@@ -1244,6 +1280,9 @@ fn setup(ctx: &egui::Context, font_size: f32) {
     style
         .text_styles
         .insert(egui::TextStyle::Small, egui::FontId::proportional(11.5));
+    style
+        .text_styles
+        .insert(egui::TextStyle::Monospace, egui::FontId::monospace(13.0));
     ctx.set_style(style);
 }
 
@@ -1582,14 +1621,21 @@ impl VaultApp {
             .selected
             .map(|i| message_cards(body(&self.catalog.sessions[i].markdown)))
             .unwrap_or_default();
+        if let Some(path) = self.selected.and_then(|i| self.local_record_path(i)) {
+            message_metadata::apply(&mut self.cards, &path);
+        }
         for card in &mut self.cards {
-            if card.context.is_none() {
-                (card.markdown, card.images) = thumbnail_markdown(&prepare_markdown(
-                    &card.markdown,
-                    &images,
-                    self.prefs.text_only,
-                ));
+            if card.role == "助手" {
+                card.sender = self
+                    .selected
+                    .map(|i| tool_name(&self.catalog.sessions[i].meta.tool))
+                    .unwrap_or_else(|| "助手".into());
             }
+            (card.markdown, card.images) = thumbnail_markdown(&prepare_markdown(
+                &card.markdown,
+                &images,
+                self.prefs.text_only,
+            ));
         }
         if self.preview_image.as_ref().is_some_and(|preview| {
             !self
@@ -2865,54 +2911,16 @@ impl eframe::App for VaultApp {
         egui::TopBottomPanel::top("toolbar")
             .frame(
                 egui::Frame::new()
-                    .fill(NAVY)
+                    .fill(PAPER)
                     .inner_margin(egui::Margin::symmetric(20, 8)),
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    brand::mark(ui, 32.0);
-                    ui.add_space(4.0);
-                    ui.vertical(|ui| {
-                        ui.spacing_mut().item_spacing.y = 2.0;
-                        ui.label(
-                            RichText::new("星匣")
-                                .size(18.0)
-                                .strong()
-                                .color(Color32::WHITE),
-                        );
-                        ui.label(
-                            RichText::new("S T A R V A U L T")
-                                .size(10.0)
-                                .color(Color32::from_rgb(168, 185, 218)),
-                        );
-                    });
-                    if ctx.screen_rect().width() >= 1100.0 {
-                        ui.add_space(20.0);
-                        ui.label(
-                            RichText::new("你的 AI 记忆，始终属于你。")
-                                .size(12.0)
-                                .color(Color32::from_rgb(183, 196, 219)),
-                        );
-                    }
+                    brand::mark(ui, 26.0);
+                    ui.label(RichText::new("星匣 · StarVault").size(14.0).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        // Scope the dark toolbar so dialogs and the reader retain their light palette.
-                        let light = ui.visuals().clone();
-                        let visuals = &mut ui.style_mut().visuals;
-                        visuals.override_text_color = Some(Color32::WHITE);
-                        for widget in [
-                            &mut visuals.widgets.inactive,
-                            &mut visuals.widgets.hovered,
-                            &mut visuals.widgets.active,
-                            &mut visuals.widgets.open,
-                        ] {
-                            widget.fg_stroke.color = Color32::WHITE;
-                            widget.bg_stroke.color = Color32::from_rgb(65, 82, 115);
-                            widget.bg_fill = Color32::from_rgb(36, 52, 81);
-                            widget.weak_bg_fill = widget.bg_fill;
-                        }
                         brand::github_link(ui);
                         ui.menu_button("管理", |ui| {
-                            *ui.visuals_mut() = light;
                             ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::NONE;
                             ui.set_min_width(170.0);
                             ui.label(RichText::new("资料与设置").small().color(MUTED));
@@ -2959,8 +2967,7 @@ impl eframe::App for VaultApp {
                         if ui
                             .add_enabled(
                                 self.job_receiver.is_none(),
-                                egui::Button::new(RichText::new("导入 ChatGPT").color(NAVY))
-                                    .fill(Color32::from_rgb(229, 232, 255)),
+                                egui::Button::new("导入 ChatGPT").frame(false),
                             )
                             .clicked()
                         {
@@ -2981,7 +2988,10 @@ impl eframe::App for VaultApp {
                             }
                         }
                         if ui
-                            .add_enabled(self.receiver.is_none(), egui::Button::new("刷新"))
+                            .add_enabled(
+                                self.receiver.is_none(),
+                                egui::Button::new("刷新").frame(false),
+                            )
                             .clicked()
                         {
                             self.reload(ctx);
@@ -3027,8 +3037,8 @@ impl eframe::App for VaultApp {
         }
         let mut clicked = None;
         egui::SidePanel::left("list")
-            .default_width(280.0)
-            .width_range(220.0..=(ctx.available_rect().width() - 500.0).clamp(220.0, 380.0))
+            .default_width(264.0)
+            .width_range(210.0..=(ctx.available_rect().width() - 480.0).clamp(210.0, 340.0))
             .frame(egui::Frame::new().fill(PAPER).inner_margin(14))
             .show(ctx, |ui| {
                 egui::TopBottomPanel::bottom("archive-shortcuts")
@@ -3190,7 +3200,7 @@ impl eframe::App for VaultApp {
                                 let selected_group =
                                     self.selected.is_some_and(|i| rows.contains(&i));
                                 let title = egui::WidgetText::from(
-                                    RichText::new(&label).strong().color(ACCENT),
+                                    RichText::new(&label).strong().color(INK),
                                 )
                                 .into_galley(
                                     ui,
@@ -3304,14 +3314,14 @@ impl eframe::App for VaultApp {
                 }
                 let s = &self.catalog.sessions[i];
                 ui.add(
-                    egui::Label::new(RichText::new(&s.display_title).size(22.0).strong())
+                    egui::Label::new(RichText::new(&s.display_title).size(19.0).strong())
                         .truncate(),
                 )
                 .on_hover_text(&s.display_title);
                 let location = format!(
                     "{}  /  {}  /  {}",
                     s.device,
-                    s.meta.tool.to_uppercase(),
+                    tool_name(&s.meta.tool),
                     s.meta.project
                 );
                 ui.add(egui::Label::new(RichText::new(&location).small().color(MUTED)).truncate())
@@ -3320,11 +3330,11 @@ impl eframe::App for VaultApp {
                 let mut open_timeline = false;
                 ui.horizontal_wrapped(|ui| {
                     if ui
-                        .button(if self.focus_message.is_some() {
+                        .add(egui::Button::new(if self.focus_message.is_some() {
                             "← 返回项目时间线"
                         } else {
                             "项目时间线"
-                        })
+                        }).frame(false))
                         .clicked()
                     {
                         self.prefs.timeline_view = true;
@@ -3337,14 +3347,17 @@ impl eframe::App for VaultApp {
                     rerender |= ui
                         .selectable_value(&mut self.prefs.text_only, true, "仅文字")
                         .changed();
-                    if ui.button("复制对话").clicked() {
-                        ctx.copy_text(s.markdown.clone());
-                    }
-                    if ui.button("附件与原文").clicked() {
+                    if ui.add(egui::Button::new("附件与活动").frame(false))
+                        .on_hover_text(format!("{} 张图片 · {} 条工具活动", s.meta.assets.len(), s.meta.operations))
+                        .clicked() {
                         self.show_resources = true;
                     }
                     ui.menu_button("更多", |ui| {
                         ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::NONE;
+                        if ui.button("复制完整对话").clicked() {
+                            ctx.copy_text(s.markdown.clone());
+                            ui.close_menu();
+                        }
                         if ui.button("定位会话文件").clicked() {
                             reveal(&s.path);
                             ui.close_menu();
@@ -3356,7 +3369,7 @@ impl eframe::App for VaultApp {
                     });
                     if !s.meta.assets.is_empty() {
                         ui.label(
-                            RichText::new(format!("{} 张图片", s.meta.assets.len()))
+                            RichText::new(format!("{} 张图片 · {} 条工具活动", s.meta.assets.len(), s.meta.operations))
                                 .small()
                                 .color(MUTED),
                         );

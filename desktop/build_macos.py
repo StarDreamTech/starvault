@@ -30,7 +30,7 @@ shutil.copytree(root.parent / 'skills', tool / 'skills', dirs_exist_ok=True)
 info = {
     'CFBundleName': 'StarVault', 'CFBundleDisplayName': '星匣 · StarVault',
     'CFBundleIdentifier': 'com.cpython666.chat-history-vault.viewer',
-    'CFBundleVersion': '4', 'CFBundleShortVersionString': '0.1.3',
+    'CFBundleVersion': '5', 'CFBundleShortVersionString': '0.1.4',
     'CFBundleExecutable': 'chat-history-vault', 'CFBundlePackageType': 'APPL',
     'CFBundleIconFile': 'StarVault',
     'NSHighResolutionCapable': True, 'LSMinimumSystemVersion': '11.0',

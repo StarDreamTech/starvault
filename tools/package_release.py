@@ -21,7 +21,7 @@ config = configparser.ConfigParser()
 config.read(root / 'setup.cfg')
 version = config['metadata']['version']
 paths = set(root.glob('*.py'))
-paths.update(root / name for name in ('README.md', 'LICENSE', '.gitignore', 'setup.cfg', 'pyproject.toml', 'MANIFEST.in'))
+paths.update(root / name for name in ('README.md', 'LICENSE', '.gitignore', 'setup.cfg', 'pyproject.toml', 'MANIFEST.in', 'package.json'))
 for pattern in ('desktop/Cargo.*', 'desktop/build_macos.py', 'desktop/src/*.rs', 'assets/*.png', 'assets/*.svg', 'assets/*.icns',
                 'assets/share/*.png', 'assets/share/catalog.json',
                 'skills/use-chat-history-vault/SKILL.md', 'skills/use-chat-history-vault/agents/*.yaml',

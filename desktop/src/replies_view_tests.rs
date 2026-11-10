@@ -1,5 +1,156 @@
 use super::*;
 
+#[test]
+fn original_metadata_folds_injections_and_preserves_human_requests() {
+    let root =
+        std::env::temp_dir().join(format!("starvault-message-metadata-{}", std::process::id()));
+    fs::create_dir_all(&root).unwrap();
+    let skill = "Base directory for this skill: /fixture/skills/browser\n\n# Built-in browser\n\nSKILL_INJECTION_MARKER\u{2028}second line";
+    let relay = "<relay from=\"coordinator\"><note>COORDINATOR_MARKER</note></relay>";
+    let wake = "<wake reason=\"mention\"><project id=\"demo\" type=\"project\"><message from=\"human\" trigger=\"true\">请写一个教程，保留 &lt;code&gt; 和 **重点**。</message></project></wake>";
+    let markdown = format!("## 用户 · first\n{relay}\n## 用户 · second\n{skill}\n## 助手 · third\nVISIBLE_RESULT_MARKER\n## 用户 · fourth\n{wake}\n");
+    let rows = [
+        serde_json::json!({"isMeta":true,"timestamp":"first","message":{"role":"user","content":relay}}),
+        serde_json::json!({"isMeta":true,"timestamp":"second","message":{"role":"user","content":[{"type":"text","text":skill}]}}),
+        serde_json::json!({"timestamp":"third","message":{"role":"assistant","content":[{"type":"text","text":"VISIBLE_RESULT_MARKER"}]}}),
+        serde_json::json!({"isMeta":true,"turnOrigin":"human","timestamp":"fourth","message":{"role":"user","content":wake}}),
+        // A conflicting timestamp or incomplete sidecar must not classify by position.
+        serde_json::json!({"isMeta":true,"timestamp":"fourth","message":{"role":"user","content":"different text"}}),
+    ];
+    fs::write(
+        root.join("dialogue.jsonl"),
+        rows.iter()
+            .map(|row| format!("{row}\n"))
+            .collect::<String>(),
+    )
+    .unwrap();
+    let mut cards = message_cards(&markdown);
+    message_metadata::apply(&mut cards, &root.join("manifest.json"));
+    assert_eq!(cards.len(), 4);
+    assert_eq!(cards[0].context, Some("Agent 协作"));
+    assert_eq!(cards[1].context, Some("Skill 上下文"));
+    assert_eq!(
+        message_metadata::title(&cards[1]),
+        "Skill · Built-in browser"
+    );
+    assert!(cards[2].context.is_none());
+    assert!(cards[3].context.is_none());
+    assert_eq!(cards[3].markdown, "请写一个教程，保留 <code> 和 **重点**。");
+    assert_eq!(cards[3].original.trim(), wake);
+    assert_eq!(cards[3].attachment_context.trim(), wake);
+    assert_eq!(cards[1].original.trim(), skill);
+
+    let ctx = egui::Context::default();
+    let mut cache = CommonMarkCache::default();
+    let mut target = None;
+    let mut output = render(&ctx, &mut cards, &mut cache, &mut target, vec![], 0);
+    for frame in 1..3 {
+        output = render(&ctx, &mut cards, &mut cache, &mut target, vec![], frame);
+    }
+    let texts = text_shapes(&output);
+    assert!(texts
+        .iter()
+        .any(|(text, _)| text.contains("VISIBLE_RESULT_MARKER")));
+    assert!(!texts
+        .iter()
+        .any(|(text, _)| text.contains("SKILL_INJECTION_MARKER")
+            || text.contains("COORDINATOR_MARKER")));
+    assert!(
+        cards[0].size.y < 60.0 && cards[1].size.y < 60.0,
+        "injections take compact rows"
+    );
+    let position = texts
+        .iter()
+        .find(|(text, _)| text.contains("Skill · Built-in browser"))
+        .unwrap()
+        .1
+        .center();
+    for (frame, pressed) in [(3, true), (4, false)] {
+        render(
+            &ctx,
+            &mut cards,
+            &mut cache,
+            &mut target,
+            vec![
+                egui::Event::PointerMoved(position),
+                egui::Event::PointerButton {
+                    pos: position,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: Default::default(),
+                },
+            ],
+            frame,
+        );
+    }
+    for frame in 5..30 {
+        output = render(&ctx, &mut cards, &mut cache, &mut target, vec![], frame);
+    }
+    assert!(
+        text_shapes(&output)
+            .iter()
+            .any(|(text, _)| text.contains("SKILL_INJECTION_MARKER")),
+        "expanded context keeps its original text"
+    );
+
+    let mut ambiguous = message_cards(&format!("## 用户 · second\n{skill}\n\n这是我的问题。\n"));
+    message_metadata::apply(&mut ambiguous, &root.join("manifest.json"));
+    assert!(
+        ambiguous[0].context.is_none(),
+        "mixed or unmatched text remains readable"
+    );
+    let image = format!("![图片](../../../images/{}.png)", "a".repeat(64));
+    let suffix = format!("\n\n### 图片 · 2026-11-10T02:35:00Z\n\n{image}\n\n{image}\n");
+    let mut with_screenshots = message_cards(&format!("## 用户 · second\n{skill}{suffix}"));
+    message_metadata::apply(&mut with_screenshots, &root.join("manifest.json"));
+    assert_eq!(with_screenshots[0].context, Some("Skill 上下文"));
+    assert_eq!(with_screenshots[0].context_image_count, 2);
+    assert!(with_screenshots[0].markdown.contains(&image));
+    assert!(!with_screenshots[0]
+        .markdown
+        .contains("SKILL_INJECTION_MARKER"));
+    assert!(with_screenshots[0]
+        .original
+        .contains("SKILL_INJECTION_MARKER"));
+    for remainder in [
+        format!("{suffix}\n我的新问题"),
+        "\n### 图片 · not-a-timestamp\n".into(),
+        format!("\n{image}"),
+    ] {
+        let mut mixed = message_cards(&format!("## 用户 · second\n{skill}{remainder}"));
+        message_metadata::apply(&mut mixed, &root.join("manifest.json"));
+        assert!(
+            mixed[0].context.is_none(),
+            "only complete generated image sections may join a meta message"
+        );
+    }
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn human_envelopes_require_one_complete_message_and_preserve_trailing_requests() {
+    let envelope = "<wake reason=\"mention\"><project id=\"demo\"><message from=\"human\">真实问题</message></project></wake>";
+    assert_eq!(
+        message_metadata::human_request(envelope).as_deref(),
+        Some("真实问题")
+    );
+    for text in [
+        format!("{envelope}\n还有问题"),
+        envelope.replace("human", "agent"),
+        envelope.replace("</wake>", ""),
+        envelope.replace(
+            "</message>",
+            "</message><message from=\"human\">第二条</message>",
+        ),
+    ] {
+        assert!(message_metadata::human_request(&text).is_none());
+        assert_eq!(
+            message_cards(&format!("## 用户 · \n{text}"))[0].markdown,
+            text
+        );
+    }
+}
+
 fn render(
     ctx: &egui::Context,
     cards: &mut [MessageCard],

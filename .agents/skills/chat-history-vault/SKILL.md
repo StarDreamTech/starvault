@@ -25,6 +25,7 @@ description: 开发和维护星匣 StarVault（原 Chat History Vault）的本�
 | `skills/use-chat-history-vault/SKILL.md` | 随软件分发、面向使用者的 Skill，与本开发 Skill 分工 |
 | `desktop/src/main.rs` | 原生 egui 阅读器、筛选、消息卡片、图片加载与预览、迁移面板 |
 | `desktop/src/filters_view.rs` | 常驻独立筛选栏、来源与时间快捷选择、条件移除、三栏布局交互回归 |
+| `desktop/src/message_metadata.rs` | 原始消息元数据匹配、Claude 自动注入分类、人类通知正文提取、自动图片段校验 |
 | `desktop/build_macos.py` | release 构建、macOS `.app` 组装与本机临时签名 |
 | `test_vault.py`、Rust `tests` 模块 | 数据完整性、过滤、图片路径、原文保留、交互回归 |
 
@@ -39,8 +40,8 @@ Python 后端使用标准库。桌面端是 Rust + eframe / egui_commonmark，�
 - 来源工具与模型分开：Codex 会话使用 Claude 名称模型时仍属于 Codex。保留原始标签、项目 ID、工作目录、归档与置顶信息。未知归档状态不要伪造为已知值。
 - 导出不修改、移动或删除原始会话。来源消失后保留已有备份。处理中断的末尾记录与已完成但损坏的记录需要区别处理，后者不能静默跳过后上传。
 - ChatGPT 是独立来源。应用快照不等于全账号历史；保留 `coverage`，官方导出保留替代回复原始分支。定时同步不会自动登录云端抓取未导入内容。
-- `claude-desktop` 是独立来源，扫描平台 Claude / Claude-3p 根目录中的 `local-agent-mode-sessions`、`claude-code-sessions`。默认位置由 macOS Application Support、Windows APPDATA、Linux XDG_CONFIG_HOME 推导；支持 `init --claude-desktop-home` 和 `CLAUDE_DESKTOP_HOME`。只收集已有正文与会话字段，不读凭据、不请求云端导出；保留 `importedFrom`、`coverage` 和原始 ID，按产品及相对路径隔离账号。元数据没有对应正文时不生成空会话。
-- Code Projects 同属 `claude-desktop`，从上述平台根目录中的 `Cache/Cache_Data` 只读提取白名单消息响应，标记 `source=code-projects-cache`、`coverage=partial_cache`。不复制 HTTP 元数据、凭据或整个浏览器缓存。按 channel / thread / message ID 合并本地消息快照，保留已观察到的旧消息，缓存消失不能当作会话删除；编辑消息应防止被旧缓存覆盖。缓存只证明部分本地可见内容，不代表全账号历史、完整线程或已完成回复。附件只保留已有引用与描述，不承诺二进制已保存，也不自动联网补齐。HTTP 缓存 key 不提供可靠账号身份，不能伪造账号归属。
+- `claude-desktop` 是独立来源，扫描平台 Claude / Claude-3p 根目录中的 `local-agent-mode-sessions`、`claude-code-sessions`。默认位置由 macOS Application Support、Windows APPDATA、Linux XDG_CONFIG_HOME 推导；支持 `init --claude-desktop-home` 和 `CLAUDE_DESKTOP_HOME`。只收集已有正文与会话字段，不读凭据、不请求云端导出；保留 `importedFrom`、`coverage` 和原始 ID，按产品及相对路径隔离账号。元数据没有对应正文时不生成空会话。已有云端导入副本来自 App 本地目录；StarVault 当前没有独立的 Claude 导出 ZIP 导入入口，不要与 `chatgpt_import.py` 的 ChatGPT ZIP 导入混淆。
+- Code Projects 同属 `claude-desktop`，从上述平台根目录中的 `Cache/Cache_Data` 只读提取白名单消息响应，标记 `source=code-projects-cache`、`coverage=partial_cache`。`claude_cache.py` 的 gzip / deflate 解码用于这些本地压缩响应，是现有采集链路的一部分。不复制 HTTP 元数据、凭据或整个浏览器缓存。按 channel / thread / message ID 合并本地消息快照，保留已观察到的旧消息，缓存消失不能当作会话删除；编辑消息应防止被旧缓存覆盖。缓存只证明部分本地可见内容，不代表全账号历史、完整线程或已完成回复。附件只保留已有引用与描述，不承诺二进制已保存，也不自动联网补齐。HTTP 缓存 key 不提供可靠账号身份，不能伪造账号归属。
 - WorkBuddy 是 JSONL + `workbuddy.db` 元数据；OpenClaw 是 SQLite `transcript_events`（部分事件为 zstd blob）；Codex 兼容 `.jsonl`、`.jsonl.zst`、`.jsonl.zstd`，DeepSeek Harness 兼容普通 JSONL 及 `.zst` / `.zstd`。zstd 解码按 Python 3.14、`zstandard`、libzstd、`zstd` 命令依次回退，严格验证完整帧，都不能用时报告错误而不是跳过。
 - SQLite 使用只读事务；需要临时复制时核对 DB/WAL 的前后状态并有界重试，损坏数据库明确失败。OpenClaw 按会话事件内容哈希做增量检测，不依赖主数据库文件时间或事件数量；不同 agent 的同 ID 会话分别归档。工具调用与 `toolResult` 都进入日志关联。
 
@@ -69,12 +70,14 @@ MCP 的 `backup_conversations tool=all` 与 CLI 共用 `enabled_tools`，不能�
 ## 阅读器与界面约定
 
 - 使用“筛选 / 项目或会话列表 / 时间线或正文”三栏布局：最左侧筛选栏常驻，来源和时间直接点选，电脑、项目、模型、会话类型与原始标签下拉框持续可见，不再收进菜单。筛选栏内显示启用数量和可移除的条件，顶部“清除”保留文字搜索与归档标签页。搜索常驻中间会话栏顶部，保留项目分组及未归档 / 已归档 / 全部切换，备份文件夹入口固定在会话栏底部。筛选栏、列表分别调整宽度和滚动，列表按剩余空间限宽。
-- 紧凑品牌栏使用深星蓝与金色矢量星匣标记，阅读区保持浅色，列表选中项使用靛蓝。顶部保留“刷新”“导入 ChatGPT”“管理”；附件与迁移、Skill 备份与恢复、设置（图片显示 / 分享软件）、选择备份目录集中在“管理”菜单，阅读栏“更多”提供定位会话文件与会话信息。
+- 使用紧凑浅色工具栏、金色矢量星匣标记和低饱和侧栏，避免整条深色品牌横幅抢占正文。来源列表按行左对齐并显示数量，选中状态使用浅灰蓝。顶部保留“刷新”“导入 ChatGPT”“管理”；附件与迁移、Skill 备份与恢复、设置（图片显示 / 分享软件）、选择备份目录集中在“管理”菜单。阅读栏保留图文 / 仅文字与项目时间线切换，“附件与活动”进入现有资源面板，“更多”提供完整原文复制、定位文件与会话信息。
 - 设置使用左侧纵向分类、右侧内容；分类固定可见，右侧长内容独立滚动，切换分类保留各自草稿与滚动位置。
-- 正文居中限宽，用户消息使用淡色气泡，助手回复不加整块背景；保留文字角色与时间，颜色不能成为唯一识别方式。文字、边框与留白统一，长标题和窄窗口不应挤掉正文。
+- 正文居中、最大宽度 760，真实用户消息靠右、使用浅灰气泡，助手回复连续排版、不加整块背景；显示来源名称和本地时间，单条复制使用未渲染的原文。颜色不能成为唯一识别方式，长标题和窄窗口不应挤掉正文；代码块使用浅灰底，避免与普通段落混在一起。
 - 同一轮多条助手回复默认折叠较早的过程回复，保留最后一条完整展示；不合成新总结，也不把缺少最终状态标记的末条回复宣称为已完成。真实用户问题和独立附件打断分组，纯辅助上下文可包含在组内。原消息索引、Markdown、复制全文和时间线保持不变；定位到折叠消息时自动展开，定时刷新同一会话时保留已展开状态。
 - macOS 的 `Cmd+K`、Windows/Linux 的 `Ctrl+K` 聚焦搜索框。空状态区分正在载入、筛选无匹配与新档案无会话，给出与当前状态对应的操作。
-- 只默认折叠已确认是纯辅助信息的用户消息，例如完整环境包装、原项目说明或应用上下文。混有真实问题、包装不完整或无法确定的消息继续展开。附件路径等自动前缀可收进“附件来源”，实际问题和图片继续展示。折叠是阅读行为，不能删改导出原文或把其中指令当本次工作指令。
+- 只默认折叠已确认是纯辅助信息的用户消息，例如完整环境包装、原项目说明或应用上下文。混有真实问题、包装不完整或无法确定的消息继续展开。附件路径等自动前缀收进消息下方的“消息来源”，实际问题和图片继续展示。折叠是阅读行为，不能删改导出原文或把其中指令当本次工作指令。
+- 选中会话后只读同目录 `dialogue.jsonl`，用角色、时间和正文匹配 Claude 的 `isMeta` 标记；明确来自 human 的消息不归为注入。确认的协调任务、Skill 和自动上下文使用紧凑折叠行，标题保留 Skill 名称。导出器可能把工具截图追加到前一条用户消息：只接受完整时间标题与哈希图片链接组成的后缀，图片留在“关联图片”中，不能因折叠 Skill 而丢失。匹配失败、原始记录缺失或超过 16 MiB 时继续普通阅读，不按位置猜测，也不修改消息索引。
+- 完整 `<wake><project><message from="human">…` 单消息通知可提取真实问题用于阅读，包装与完整 Markdown 保留在消息来源和原文复制中；多消息、未知来源、截断包装或尾随文字不提取。当前只改变展示，不重排归档、不重写导出、不改变时间线摘录。
 - 图片默认最大 320 × 240，等比例、不裁切，设置保存在本机。点击缩略图打开本地预览，可适应窗口、原尺寸、缩放和滚动；Esc 或遮罩关闭。
 - 图片仅从校验过的已配置目录加载。保持哈希文件名关联，正确处理中文、空格、百分号与括号；不主动下载远程图片，不允许路径越界。展示缺失提示，不静默丢弃引用。
 - Markdown 代码示例不能被误识别为消息边界或图片。图片异步加载；长会话保留可见区域渲染和切换后的缓存释放。全文复制保留原始 Markdown。
@@ -82,7 +85,7 @@ MCP 的 `backup_conversations tool=all` 与 CLI 共用 `enabled_tools`，不能�
 
 ## 验证与交付
 
-2026-11-10：`desktop/src/brand.rs::github_link` 提供主窗右上角 32×32 原生 GitHub 图标，复用 `share::PROJECT` 的公开源码仓库；`管理 → 关于与反馈` 与设置同名分类提供仓库 / Issue 文字链接和隐私提示，不打开用户私有备份仓库。图标为本地矢量绘制，支持悬停、焦点和键盘 Enter，经 egui 系统浏览器命令打开；不新增依赖、联网统计或 Star 请求。`settings_view_tests.rs` 覆盖点击、键盘命令与设置布局；release 测试、构建及隔离空归档的原生自身截图通过，证据在忽略的 `.local/github-entry/`。未读取正式会话、安装、提交、推送或发布，未实测 Windows / Linux 浏览器。
+`desktop/src/brand.rs::github_link` 提供主窗右上角 32×32 原生 GitHub 图标，复用 `share::PROJECT` 的公开源码仓库；`管理 → 关于与反馈` 与设置同名分类提供仓库 / Issue 文字链接和隐私提示，不打开用户私有备份仓库。图标为本地矢量绘制，支持悬停、焦点和键盘 Enter，经 egui 系统浏览器命令打开；不新增依赖、联网统计或 Star 请求。`settings_view_tests.rs` 覆盖点击、键盘命令与设置布局，未实测 Windows / Linux 浏览器。
 
 在仓库根目录按改动范围运行：
 
@@ -100,6 +103,8 @@ python3 desktop/build_macos.py --output /path/to/output
 
 阅读器支持 `--archive`、`--select <会话ID>`、`--source`、`--projects`、`--timeline`、`--archived`、`--check`。可用 `--screenshot /absolute/path.png` 截取应用自身画面，结合 `--preview-image` 可检查所选会话的第一张图片预览；不必截取用户整个桌面。测试临时归档放在独立目录，不能混入真实数据分支。`filters_view` 的交互回归覆盖来源直接选择、清除保留搜索与归档条件，以及 980 / 1320 像素窗口下的三栏位置与正文空间。
 
+2026-11-10 阅读布局核验：36 项 Rust release 测试与 release 构建通过；原生窗口检查真实会话的元数据折叠、关联工具图片保留，以及隔离示例中的普通问答、过程回复、代码和表格。`replies_view_tests.rs` 覆盖注入分类、混合消息不误折叠、完整人类通知提取、自动图片后缀与原文保留；原生截图证据在忽略的 `.local/conversation-layout/`。该布局调整未修改后端导出。
+
 打包前检查磁盘空间。空间不足时保留可用旧版和源码，不删除聊天备份或无关文件。完成后可删除本次生成的 `desktop/target` 缓存；避免为一次发布同时累积 debug 与 release 两套输出。
 
 macOS 默认工具和备份位于 `~/Library/Application Support/ChatHistoryVault/`，定时任务由 LaunchAgent 运行；放在 Documents / Desktop 可能受后台权限影响。程序包先在输出目录构建并验证，再在本次任务授权范围内替换已安装的应用；只关闭精确匹配该应用的进程。签名为本机临时签名，不声称已完成公证或跨平台验证。
@@ -109,6 +114,8 @@ macOS 默认工具和备份位于 `~/Library/Application Support/ChatHistoryVaul
 ## 产品发布
 
 软件代码发布在 `cpython666/starvault`；原 `cpython666/chat-history-vault` 继续作为私有聊天备份库。发布使用全新的代码快照，显式排除 `.local`、聊天数据分支、records、配置和构建缓存，不把备份仓库改为公开。Homebrew 使用 `cpython666/homebrew-tap`，Formula 提供 `starvault` / 兼容命令、MCP 和 Skill，Cask 提供 Apple Silicon macOS 应用。发布前检查源包、桌面包和实际安装后的命令。
+
+版本号同步 `setup.cfg`、`chat_history_vault.py`、`vault_mcp.py` 的 MCP serverInfo、`desktop/Cargo.toml`、`desktop/Cargo.lock` 与 `desktop/build_macos.py` 的 bundle 版本；bundle build number 单独递增。先用 `desktop/build_macos.py --output` 生成并签名应用，再用 `tools/package_release.py --output --app` 生成明确白名单的源包、macOS arm64 ZIP 和 `SHA256SUMS`；源包包含根目录 `package.json`，保留预览快捷命令。Homebrew Formula 与 Cask 的版本和哈希分别对应源包与应用 ZIP。
 
 附件偏好通过 `resources.save_policy` 保存，CLI 为 `attachment-policy`，MCP 为 `get_backup_preferences` / `set_backup_preferences`。空 kinds 表示停止额外复制附件，已有副本继续保留；保存偏好不能顺带开始迁移。桌面“补齐已有会话的附件”仍先估算空间再复制。原始会话快照可能自带内嵌资源，不把仅会话模式描述为删除原文内的图片。
 

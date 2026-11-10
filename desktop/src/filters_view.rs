@@ -17,8 +17,8 @@ pub(super) fn show(ctx: &egui::Context, filters: &mut Filters, catalog: &Catalog
     .count()
         + usize::from(filters.days > 0);
     egui::SidePanel::left("filters")
-        .default_width(218.0)
-        .width_range(190.0..=260.0)
+        .default_width(196.0)
+        .width_range(176.0..=240.0)
         .frame(
             egui::Frame::new()
                 .fill(egui::Color32::WHITE)
@@ -59,15 +59,72 @@ pub(super) fn show(ctx: &egui::Context, filters: &mut Filters, catalog: &Catalog
                         .map(|s| s.meta.tool.clone())
                         .filter(|tool| !tool.is_empty())
                         .collect();
-                    ui.horizontal_wrapped(|ui| {
-                        changed |= ui
-                            .selectable_value(&mut filters.tool, String::new(), "全部来源")
-                            .changed();
-                        for tool in tools {
-                            let name = tool_name(&tool);
-                            changed |= ui.selectable_value(&mut filters.tool, tool, name).changed();
+                    for tool in std::iter::once(String::new()).chain(tools) {
+                        let name = if tool.is_empty() {
+                            "全部来源".into()
+                        } else {
+                            tool_name(&tool)
+                        };
+                        let count = catalog
+                            .sessions
+                            .iter()
+                            .filter(|s| tool.is_empty() || s.meta.tool == tool)
+                            .count();
+                        let selected = filters.tool == tool;
+                        let (rect, response) = ui.allocate_exact_size(
+                            egui::vec2(ui.available_width(), 27.0),
+                            egui::Sense::click(),
+                        );
+                        response.widget_info(|| {
+                            egui::WidgetInfo::selected(
+                                egui::WidgetType::SelectableLabel,
+                                ui.is_enabled(),
+                                selected,
+                                &name,
+                            )
+                        });
+                        if selected || response.hovered() || response.has_focus() {
+                            ui.painter().rect_filled(
+                                rect,
+                                6.0,
+                                if selected { SELECTED } else { super::HOVER },
+                            );
+                            if response.has_focus() {
+                                ui.painter().rect_stroke(
+                                    rect,
+                                    6.0,
+                                    egui::Stroke::new(1.0, ACCENT),
+                                    egui::StrokeKind::Inside,
+                                );
+                            }
                         }
-                    });
+                        let text = egui::WidgetText::from(RichText::new(&name).size(13.0))
+                            .into_galley(
+                                ui,
+                                Some(egui::TextWrapMode::Truncate),
+                                (rect.width() - 52.0).max(0.0),
+                                egui::TextStyle::Button,
+                            );
+                        ui.painter().galley(
+                            egui::pos2(rect.left() + 10.0, rect.center().y - text.size().y * 0.5),
+                            text,
+                            if selected { ACCENT } else { super::INK },
+                        );
+                        ui.painter().text(
+                            rect.right_center() - egui::vec2(10.0, 0.0),
+                            egui::Align2::RIGHT_CENTER,
+                            count.to_string(),
+                            egui::FontId::proportional(11.0),
+                            MUTED,
+                        );
+                        let response = response
+                            .on_hover_text(format!("{name} · {count} 个会话"))
+                            .on_hover_cursor(egui::CursorIcon::PointingHand);
+                        if response.clicked() && !selected {
+                            filters.tool = tool;
+                            changed = true;
+                        }
+                    }
                     ui.add_space(6.0);
                     changed |= filter_combo(
                         ui,
