@@ -5,7 +5,7 @@ description: 开发和维护星匣 StarVault（原 Chat History Vault）的本�
 
 # 星匣 · StarVault
 
-产品标语为“你的 AI 记忆，始终属于你。”。展示名称使用星匣 / StarVault；命令、模块、MCP 服务、Skill 标识与数据路径兼容 `chat-history-vault` 等既有名称。软件开发、界面修改、预览和打包均在 `cpython666/starvault` 的检出目录进行；`cpython666/chat-history-vault` 仅用于私有聊天备份，不作为软件开发入口。
+产品标语为“你的 AI 记忆，始终属于你。”。展示名称使用星匣 / StarVault；命令、模块、MCP 服务、Skill 标识与数据路径兼容 `chat-history-vault` 等既有名称。软件开发、界面修改、预览和打包均在 `StarDreamTech/starvault` 的检出目录进行；`cpython666/chat-history-vault` 仅用于私有聊天备份，不作为软件开发入口。
 
 维护一个以原始对话为核心的本地档案工具：Git 管理文字，附件集中保存在本地；桌面端负责检索、阅读和可选迁移。先看仓库 [README](../../../README.md) 和当前改动，延续已有实现。以下是产品约定，不代表额外的外部操作授权。
 
@@ -113,7 +113,7 @@ macOS 默认工具和备份位于 `~/Library/Application Support/ChatHistoryVaul
 
 ## 产品发布
 
-软件代码发布在 `cpython666/starvault`；原 `cpython666/chat-history-vault` 继续作为私有聊天备份库。发布使用全新的代码快照，显式排除 `.local`、聊天数据分支、records、配置和构建缓存，不把备份仓库改为公开。Homebrew 使用 `cpython666/homebrew-tap`，Formula 提供 `starvault` / 兼容命令、MCP 和 Skill，Cask 提供 Apple Silicon macOS 应用。发布前检查源包、桌面包和实际安装后的命令。
+软件代码发布在 `StarDreamTech/starvault`；原 `cpython666/chat-history-vault` 继续作为私有聊天备份库。发布使用全新的代码快照，显式排除 `.local`、聊天数据分支、records、配置和构建缓存，不把备份仓库改为公开。Homebrew 使用 `cpython666/homebrew-tap`，Formula 提供 `starvault` / 兼容命令、MCP 和 Skill，Cask 提供 Apple Silicon macOS 应用。发布前检查源包、桌面包和实际安装后的命令。
 
 版本号同步 `setup.cfg`、`chat_history_vault.py`、`vault_mcp.py` 的 MCP serverInfo、`desktop/Cargo.toml`、`desktop/Cargo.lock` 与 `desktop/build_macos.py` 的 bundle 版本；bundle build number 单独递增。先用 `desktop/build_macos.py --output` 生成并签名应用，再用 `tools/package_release.py --output --app` 生成明确白名单的源包、macOS arm64 ZIP 和 `SHA256SUMS`；源包包含根目录 `package.json`，保留预览快捷命令。Homebrew Formula 与 Cask 的版本和哈希分别对应源包与应用 ZIP。
 

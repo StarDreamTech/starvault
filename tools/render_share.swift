@@ -92,7 +92,7 @@ for item in catalog["images"] as! [[String:Any]] {
         text(feature[0],x+20,1083,256,36,25,gold,.semibold)
         text(feature[1],x+20,1130,256,63,english ? 20:22,color(0xd9e3f7))
     }
-    text("github.com/cpython666/starvault",74,1260,935,37,26,color(0xffffff),.medium)
+    text("github.com/StarDreamTech/starvault",74,1260,935,37,26,color(0xffffff),.medium)
     let note:String
     if kind=="overview" {note=english ? "Local sources + manual imports · Cache coverage may be partial":"本地来源与手动导入 · 缓存覆盖可能不完整"}
     else if kind=="ownership" {note=english ? "Move the complete folder. Only files already backed up travel with it.":"请复制整个备份目录；尚未备份的原文件需先补齐。"}

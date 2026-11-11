@@ -92,7 +92,7 @@ fn github_icon_opens_only_the_public_source_repository() {
             .collect();
         if frame == 2 {
             assert_eq!(urls.len(), 1);
-            assert_eq!(urls[0].url, "https://github.com/cpython666/starvault");
+            assert_eq!(urls[0].url, "https://github.com/StarDreamTech/starvault");
             assert!(urls[0].new_tab);
         } else {
             assert!(urls.is_empty());
