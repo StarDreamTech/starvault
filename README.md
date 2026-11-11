@@ -4,7 +4,7 @@
 
 星匣把分散的 AI 对话、附件与 Skill 收进自己的长期档案，方便检索、回溯和换机迁移，也为更懂你的助手准备有出处的历史资料。
 
-产品原名为 Chat History Vault（会话档案）。软件代码发布于 [cpython666/starvault](https://github.com/cpython666/starvault)，聊天备份使用用户自行配置的私有仓库。`starvault` 与 `chat-history-vault` 命令均可使用；Python 模块、MCP 服务标识、Skill 标识和数据目录保持兼容。
+产品原名为 Chat History Vault（会话档案）。软件代码发布于 [StarDreamTech/starvault](https://github.com/StarDreamTech/starvault)，聊天备份使用用户自行配置的私有仓库。`starvault` 与 `chat-history-vault` 命令均可使用；Python 模块、MCP 服务标识、Skill 标识和数据目录保持兼容。
 
 桌面主窗口右上角的 GitHub 图标打开软件的公开源码仓库，不是聊天备份仓库。「管理 → 关于与反馈」（或设置中的同名分类）提供仓库及问题反馈链接；反馈公开，请勿上传私人对话、附件或凭据。
 
@@ -22,7 +22,7 @@ open -a StarVault
 
 桌面 Cask 同时安装 CLI 和 Python 后端，应用自带工具代码与图标。首版 macOS 应用使用本机临时签名，尚未通过 Apple 开发者签名和公证；若系统阻止打开，可在“系统设置 → 隐私与安全性”核对来源后允许打开。Intel macOS、Windows、Linux 的桌面端目前使用源码构建；不要将它们称为已有可下载的原生安装包。
 
-源码、版本与安装包见 [GitHub Releases](https://github.com/cpython666/starvault/releases)。公开软件仓库不存放聊天内容；备份同步会校验目标为私有仓库。
+源码、版本与安装包见 [GitHub Releases](https://github.com/StarDreamTech/starvault/releases)。公开软件仓库不存放聊天内容；备份同步会校验目标为私有仓库。
 
 新版 Homebrew 若提示未信任此安装源，核对 [Formula / Cask](https://github.com/cpython666/homebrew-tap) 后，可仅信任本产品：`brew trust --formula cpython666/tap/starvault` 和 `brew trust --cask cpython666/tap/starvault`，再继续安装。
 

@@ -9,7 +9,7 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-pub const PROJECT: &str = "https://github.com/cpython666/starvault";
+pub const PROJECT: &str = "https://github.com/StarDreamTech/starvault";
 const CATALOG: &str = include_str!("../../assets/share/catalog.json");
 const LANGUAGES: [&str; 2] = ["zh-CN", "en-US"];
 const THEMES: [&str; 3] = ["overview", "ownership", "context"];
