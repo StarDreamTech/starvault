@@ -2,6 +2,8 @@
 
 **你的 AI 记忆，始终属于你。**
 
+**[项目介绍 / Project site](https://stardreamtech.github.io/projects/starvault/)**
+
 星匣把分散的 AI 对话、附件与 Skill 收进自己的长期档案，方便检索、回溯和换机迁移，也为更懂你的助手准备有出处的历史资料。
 
 产品原名为 Chat History Vault（会话档案）。软件代码发布于 [StarDreamTech/starvault](https://github.com/StarDreamTech/starvault)，聊天备份使用用户自行配置的私有仓库。`starvault` 与 `chat-history-vault` 命令均可使用；Python 模块、MCP 服务标识、Skill 标识和数据目录保持兼容。
