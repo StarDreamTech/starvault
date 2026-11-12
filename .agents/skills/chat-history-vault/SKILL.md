@@ -24,6 +24,7 @@ description: 开发和维护星匣 StarVault（原 Chat History Vault）的本�
 | `chat_history_vault.py`、`pyproject.toml`、`setup.cfg` | 统一 CLI、Python 模块入口、安装与 Skill 分发 |
 | `skills/use-chat-history-vault/SKILL.md` | 随软件分发、面向使用者的 Skill，与本开发 Skill 分工 |
 | `desktop/src/main.rs` | 原生 egui 阅读器、筛选、消息卡片、图片加载与预览、迁移面板 |
+| `desktop/src/update.rs` | 只读 `StarDreamTech/starvault` 最新正式版；校验后按平台替换并重启 |
 | `desktop/src/filters_view.rs` | 常驻独立筛选栏、来源与时间快捷选择、条件移除、三栏布局交互回归 |
 | `desktop/src/message_metadata.rs` | 原始消息元数据匹配、Claude 自动注入分类、人类通知正文提取、自动图片段校验 |
 | `desktop/build_macos.py` | release 构建、macOS `.app` 组装与本机临时签名 |
@@ -86,6 +87,8 @@ MCP 的 `backup_conversations tool=all` 与 CLI 共用 `enabled_tools`，不能�
 ## 验证与交付
 
 `desktop/src/brand.rs::github_link` 提供主窗右上角 32×32 原生 GitHub 图标，复用 `share::PROJECT` 的公开源码仓库；`管理 → 关于与反馈` 与设置同名分类提供仓库 / Issue 文字链接和隐私提示，不打开用户私有备份仓库。图标为本地矢量绘制，支持悬停、焦点和键盘 Enter，经 egui 系统浏览器命令打开；不新增依赖、联网统计或 Star 请求。`settings_view_tests.rs` 覆盖点击、键盘命令与设置布局，未实测 Windows / Linux 浏览器。
+
+桌面更新只请求 `https://api.github.com/repos/StarDreamTech/starvault/releases/latest` 和该仓库 `releases/download` 下的资产，不读取 token，也不使用个人备份仓库。默认只在有更新时提示，用户确认后才下载。优先用内置 minisign 公钥校验 `安装包.minisig` 或 `SHA256SUMS.minisig`；公钥为空或 Release 没有对应签名时，用 `SHA256SUMS`。校验失败不安装。macOS 已安装的 `StarVault.app` 由 `desktop/src/update.rs` 里的临时脚本在主进程退出后替换并 `open`；Windows 在存在 `StarVault-<版本>-windows-x64.zip` 时同样等待退出后替换目录并启动 `chat-history-vault.exe`。Linux 与没有对应安装包的平台只提示去 Releases。网络失败保持安静。`STARVAULT_DISABLE_UPDATE` 可关闭自动检查。发布流程已由 `tools/package_release.py` 生成 `SHA256SUMS`；`.github/workflows/release-checksums.yml` 仅在已发布的正式版缺少该文件时补上传，不改动已有安装包。
 
 在仓库根目录按改动范围运行：
 
