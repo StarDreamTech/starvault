@@ -1,0 +1,48 @@
+# Attach SHA256SUMS when a published stable release does not already include one.
+# Existing packages are never rebuilt or replaced. No personal token is stored here.
+name: Release checksums
+on:
+  release:
+    types: [published]
+permissions:
+  contents: write
+jobs:
+  sha256sums:
+    if: github.repository == 'StarDreamTech/starvault'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upload SHA256SUMS when the release does not include one
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s\n' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "tag is not a stable X.Y.Z release; packages are unchanged"
+            exit 0
+          fi
+          work=$(mktemp -d)
+          gh release view "$TAG" --repo StarDreamTech/starvault --json assets --jq '.assets[].name' > "$work/names"
+          if grep -Fxq 'SHA256SUMS' "$work/names"; then
+            echo "SHA256SUMS already attached; packages are unchanged"
+            exit 0
+          fi
+          if ! grep -q . "$work/names"; then
+            echo "release has no assets; packages are unchanged"
+            exit 0
+          fi
+          gh release download "$TAG" --repo StarDreamTech/starvault --dir "$work"
+          (
+            cd "$work"
+            find . -type f ! -name 'SHA256SUMS' ! -name 'names' -print0 \
+              | sort -z \
+              | while IFS= read -r -d '' path; do
+                  name=${path#./}
+                  sha256sum "$name"
+                done
+          ) > "$work/SHA256SUMS"
+          if [ ! -s "$work/SHA256SUMS" ]; then
+            echo "nothing to hash; packages are unchanged"
+            exit 0
+          fi
+          gh release upload "$TAG" "$work/SHA256SUMS" --repo StarDreamTech/starvault

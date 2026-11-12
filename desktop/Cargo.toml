@@ -18,6 +18,8 @@ regex = "1"
 chrono = "0.4"
 rfd = "0.15"
 url = "2"
+sha2 = "=0.10.8"
+minisign-verify = "=0.2.4"
 
 [profile.dev]
 debug = 0
@@ -28,3 +30,6 @@ opt-level = "s"
 lto = "thin"
 strip = true
 incremental = false
+
+[dev-dependencies]
+minisign = "=0.10.0"

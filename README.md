@@ -124,6 +124,10 @@ chat-history-vault skill-path
 
 浏览和迁移均不修改原始聊天，不执行历史命令。“管理 → 附件与迁移”只调用本机备份工具复制所选文件，“导入 ChatGPT”只进行本地导入；后续定时同步才上传对话文字。`--check` 可以无窗口验证备份索引。
 
+启动后会在后台查看 [StarDreamTech/starvault 的最新正式版](https://github.com/StarDreamTech/starvault/releases)。只有发现新版本时才提示；需要点击「下载并安装」后才会下载。下载后先校验：若该版本带有应用内置公钥对应的 minisign 发布签名，先校验签名；没有可用签名时，使用 Release 里的 `SHA256SUMS`。校验失败不会安装。网络不通时保持安静，不影响阅读。也可从「管理 → 检查更新」或「关于与反馈」手动检查。设置 `STARVAULT_DISABLE_UPDATE=1` 可关闭自动检查。
+
+macOS 上，若当前运行的是已安装的 `StarVault.app`，校验通过后程序会退出，临时脚本等进程结束后用 `ditto` 替换 `.app`，再 `open` 重新打开。签名无效会取消替换；安装包本身没有代码签名时，仍以已通过的 `SHA256SUMS` 为准。Windows 上，正式版若附有 `StarVault-<版本>-windows-x64.zip`（根目录或单一顶层目录中含 `chat-history-vault.exe`），同样等进程退出后复制到程序所在目录并重新启动。Linux、Intel Mac、源码运行，以及还没有对应安装包的系统，只会提示前往 Releases 手动下载。当前发布的桌面安装包仍是 Apple Silicon macOS，且为本机临时签名、未公证。
+
 开发与预览在 `starvault` 软件仓库中进行，`chat-history-vault` 私有仓库用于聊天备份。软件仓库根目录提供以下快捷命令（需要 Rust 和 npm，无需安装 npm 依赖）：
 
 ```sh

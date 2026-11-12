@@ -27,6 +27,7 @@ mod share;
 mod timeline;
 #[cfg(test)]
 mod timeline_view_tests;
+mod update;
 
 const ACCENT: Color32 = Color32::from_rgb(81, 94, 150);
 const NAVY: Color32 = Color32::from_rgb(22, 32, 55);
@@ -1342,6 +1343,22 @@ fn settings_layout(
     selected
 }
 
+enum UpdatePhase {
+    Idle,
+    Checking,
+    Downloading,
+    Ready(update::Offer),
+    Note(String),
+}
+
+enum UpdateEvent {
+    Checked {
+        manual: bool,
+        report: update::UpdateReport,
+    },
+    Prepared(Result<update::PreparedSwap, String>),
+}
+
 struct VaultApp {
     root: PathBuf,
     catalog: Catalog,
@@ -1394,6 +1411,9 @@ struct VaultApp {
     timeline_newest: bool,
     focus_message: Option<usize>,
     scroll_target: Option<usize>,
+    update_rx: Option<mpsc::Receiver<UpdateEvent>>,
+    update_phase: UpdatePhase,
+    update_started: bool,
 }
 
 impl VaultApp {
@@ -1475,6 +1495,9 @@ impl VaultApp {
             timeline_newest: false,
             focus_message: None,
             scroll_target: None,
+            update_rx: None,
+            update_phase: UpdatePhase::Idle,
+            update_started: false,
         };
         app.reload(&cc.egui_ctx);
         app
@@ -1911,10 +1934,183 @@ impl VaultApp {
         jump
     }
 
+    fn kick_update(&mut self, ctx: &egui::Context, manual: bool) {
+        if self.screenshot.is_some() {
+            self.update_started = true;
+            return;
+        }
+        if self.update_rx.is_some() {
+            return;
+        }
+        let auto_disabled = std::env::var_os("STARVAULT_DISABLE_UPDATE").is_some();
+        if !manual && (self.update_started || auto_disabled) {
+            self.update_started = true;
+            return;
+        }
+        self.update_started = true;
+        if manual {
+            self.update_phase = UpdatePhase::Checking;
+        }
+        let (tx, rx) = mpsc::channel();
+        self.update_rx = Some(rx);
+        let ctx = ctx.clone();
+        let exe = std::env::current_exe().unwrap_or_default();
+        thread::spawn(move || {
+            let report = update::check_latest(
+                &update::CurlSource,
+                update::current_version(),
+                update::current_platform(),
+                &exe,
+            );
+            let _ = tx.send(UpdateEvent::Checked { manual, report });
+            ctx.request_repaint();
+        });
+    }
+
+    fn start_download(&mut self, ctx: &egui::Context, package: update::PackageRef) {
+        if self.update_rx.is_some() {
+            return;
+        }
+        self.update_phase = UpdatePhase::Downloading;
+        let (tx, rx) = mpsc::channel();
+        self.update_rx = Some(rx);
+        let ctx = ctx.clone();
+        let exe = std::env::current_exe().unwrap_or_default();
+        let dir = app_home().join("updates");
+        thread::spawn(move || {
+            let result = update::prepare_swap(
+                &update::CurlSource,
+                &package,
+                update::current_platform(),
+                &exe,
+                &dir,
+                update::RELEASE_MINISIGN_PUBLIC_KEY,
+            );
+            let _ = tx.send(UpdateEvent::Prepared(result));
+            ctx.request_repaint();
+        });
+    }
+
+    fn poll_update(&mut self, ctx: &egui::Context) {
+        let event = match self.update_rx.as_ref().map(|rx| rx.try_recv()) {
+            Some(Ok(event)) => event,
+            Some(Err(mpsc::TryRecvError::Empty)) | None => return,
+            Some(Err(mpsc::TryRecvError::Disconnected)) => {
+                self.update_rx = None;
+                if matches!(self.update_phase, UpdatePhase::Checking) {
+                    self.update_phase =
+                        UpdatePhase::Note("暂时无法检查更新。当前使用不受影响。".into());
+                } else if matches!(self.update_phase, UpdatePhase::Downloading) {
+                    self.update_phase =
+                        UpdatePhase::Note("没有完成下载或校验，已取消安装。".into());
+                }
+                return;
+            }
+        };
+        self.update_rx = None;
+        match event {
+            UpdateEvent::Checked { manual, report } => match update::present(manual, report) {
+                update::UiDecision::Silent => {
+                    if matches!(self.update_phase, UpdatePhase::Checking) {
+                        self.update_phase = UpdatePhase::Idle;
+                    }
+                }
+                update::UiDecision::Note(text) => self.update_phase = UpdatePhase::Note(text),
+                update::UiDecision::Offer(offer) => self.update_phase = UpdatePhase::Ready(offer),
+            },
+            UpdateEvent::Prepared(Ok(prepared)) => match update::launch_swap(&prepared) {
+                Ok(()) => {
+                    self.update_phase = UpdatePhase::Note("校验通过，正在退出并替换旧版本…".into());
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+                Err(error) => self.update_phase = UpdatePhase::Note(error),
+            },
+            UpdateEvent::Prepared(Err(error)) => self.update_phase = UpdatePhase::Note(error),
+        }
+    }
+
+    fn show_update_banner(&mut self, ctx: &egui::Context) {
+        enum View {
+            Busy(&'static str),
+            Note { text: String, failure: bool },
+            Ready(update::Offer),
+        }
+        let view = match &self.update_phase {
+            UpdatePhase::Idle => return,
+            UpdatePhase::Checking => View::Busy("正在检查更新…"),
+            UpdatePhase::Downloading => View::Busy("正在下载并校验…"),
+            UpdatePhase::Note(text) => View::Note {
+                failure: text.contains("取消"),
+                text: text.clone(),
+            },
+            UpdatePhase::Ready(offer) => View::Ready(offer.clone()),
+        };
+        let mut download = None;
+        let mut open = None;
+        let mut dismiss = false;
+        egui::TopBottomPanel::top("update-banner")
+            .frame(
+                egui::Frame::new()
+                    .fill(Color32::WHITE)
+                    .inner_margin(egui::Margin::symmetric(20, 8)),
+            )
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| match &view {
+                    View::Busy(text) => {
+                        ui.spinner();
+                        ui.label(RichText::new(*text).small().color(MUTED));
+                    }
+                    View::Note { text, failure } => {
+                        ui.label(RichText::new(text).small().color(if *failure {
+                            Color32::DARK_RED
+                        } else {
+                            MUTED
+                        }));
+                        if ui.button("关闭").clicked() {
+                            dismiss = true;
+                        }
+                    }
+                    View::Ready(offer) => {
+                        ui.label(RichText::new(&offer.summary).small().color(INK));
+                        if matches!(offer.action, update::OfferAction::Swap(_))
+                            && ui
+                                .add_enabled(
+                                    self.update_rx.is_none(),
+                                    egui::Button::new("下载并安装"),
+                                )
+                                .clicked()
+                        {
+                            if let update::OfferAction::Swap(package) = &offer.action {
+                                download = Some(package.clone());
+                            }
+                        }
+                        if ui.button("查看发布页").clicked() {
+                            open = Some(offer.page.clone());
+                        }
+                        if ui.button("稍后").clicked() {
+                            dismiss = true;
+                        }
+                    }
+                });
+            });
+        if dismiss {
+            self.update_phase = UpdatePhase::Idle;
+        }
+        if let Some(page) = open {
+            if update::is_releases_page(&page) {
+                ctx.open_url(egui::OpenUrl::new_tab(page));
+            }
+        }
+        if let Some(package) = download {
+            self.start_download(ctx, package);
+        }
+    }
+
     fn image_settings(&mut self, ctx: &egui::Context) {
         let mut open = self.show_settings;
         let mut apply = false;
         let mut resize = false;
+        let mut check_update = false;
         egui::Window::new("设置")
             .open(&mut open)
             .default_width(1020.0)
@@ -1929,6 +2125,25 @@ impl VaultApp {
                         ui.heading("关于星匣 StarVault");
                         ui.label(format!("版本 {}", env!("CARGO_PKG_VERSION")));
                         ui.label("你的 AI 记忆，始终属于你。");
+                        ui.add_space(8.0);
+                        if ui
+                            .add_enabled(self.update_rx.is_none(), egui::Button::new("检查更新"))
+                            .clicked()
+                        {
+                            check_update = true;
+                        }
+                        let update_text = match &self.update_phase {
+                            UpdatePhase::Checking => "正在检查更新…",
+                            UpdatePhase::Downloading => "正在下载并校验…",
+                            UpdatePhase::Note(text) => text.as_str(),
+                            UpdatePhase::Ready(offer) => offer.summary.as_str(),
+                            UpdatePhase::Idle => "",
+                        };
+                        if !update_text.is_empty() {
+                            ui.label(RichText::new(update_text).small().color(MUTED));
+                        }
+                        ui.add_space(8.0);
+                        ui.label(RichText::new("更新只查看 GitHub 上 StarDreamTech/starvault 的最新正式版。下载后会先校验，失败不会安装。Linux 请到发布页手动下载。").small().color(MUTED));
                         ui.add_space(12.0);
                         ui.hyperlink_to("GitHub 仓库", share::PROJECT);
                         ui.hyperlink_to("反馈问题", format!("{}/issues/new", share::PROJECT));
@@ -2002,6 +2217,9 @@ impl VaultApp {
                     );
                 });
             });
+        if check_update {
+            self.kick_update(ctx, true);
+        }
         if resize {
             for card in &mut self.cards {
                 card.size.x = 0.0;
@@ -2880,6 +3098,8 @@ impl eframe::App for VaultApp {
         self.poll(ctx);
         self.poll_job(ctx);
         self.poll_skill_job();
+        self.poll_update(ctx);
+        self.kick_update(ctx, false);
         if let Some(path) = &self.screenshot {
             ctx.request_repaint_after(Duration::from_millis(100));
             for event in ctx.input(|i| i.events.clone()) {
@@ -2908,6 +3128,7 @@ impl eframe::App for VaultApp {
         if ctx.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::K)) {
             ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("archive-search")));
         }
+        let mut manual_check = false;
         egui::TopBottomPanel::top("toolbar")
             .frame(
                 egui::Frame::new()
@@ -2948,6 +3169,16 @@ impl eframe::App for VaultApp {
                             if ui.button("关于与反馈").clicked() {
                                 self.settings_tab = SettingsTab::About;
                                 self.show_settings = true;
+                                ui.close_menu();
+                            }
+                            if ui
+                                .add_enabled(
+                                    self.update_rx.is_none(),
+                                    egui::Button::new("检查更新"),
+                                )
+                                .clicked()
+                            {
+                                manual_check = true;
                                 ui.close_menu();
                             }
                             ui.separator();
@@ -3002,6 +3233,10 @@ impl eframe::App for VaultApp {
                     });
                 });
             });
+        if manual_check {
+            self.kick_update(ctx, true);
+        }
+        self.show_update_banner(ctx);
         egui::TopBottomPanel::bottom("footer")
             .frame(
                 egui::Frame::new()
